@@ -1,5 +1,5 @@
 [package]
-name = "artifish"
+name    = "artifish"
 version = "0.1.0"
 authors = ["Wout Schellaert <wout.schellaert@gmail.com>"]
 edition = "2018"
@@ -7,3 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+piston                   = "0.53.0"
+piston2d-graphics        = "0.40.0"
+pistoncore-glutin_window = "0.69.0"
+piston2d-opengl_graphics = "0.78.0"
+rand                     = "0.8.4"
