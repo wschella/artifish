@@ -3,23 +3,29 @@ extern crate graphics;
 extern crate opengl_graphics;
 extern crate piston;
 extern crate rand;
+// extern crate piston_window;
 
+// use graphics::glyph_cache::rusttype::GlyphCache;
+use opengl_graphics::{OpenGL, Filter, GlGraphics, GlyphCache, TextureSettings};
 use glutin_window::GlutinWindow as Window;
 use graphics::ellipse::Border;
-use opengl_graphics::{GlGraphics, OpenGL};
 use piston::event_loop::{EventSettings, Events};
 use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
 use piston::window::WindowSettings;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use decorum::NotNan;
 
 const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
 
-pub struct App {
+pub struct App<'a> {
     gl: GlGraphics, // OpenGL drawing backend.
     state: State,
+    glyph_cache: GlyphCache<'a>,
 }
+
+
 
 pub struct State {
     fishes: Vec<Fish>,
@@ -71,9 +77,9 @@ impl std::ops::Mul<f64> for Vec2 {
 }
 
 impl State {
-    fn new() -> Self {
+    fn new(seed: u64) -> Self {
         let mut fishes = Vec::new();
-        let mut rng = rand::thread_rng();
+        let mut rng = ChaCha20Rng::seed_from_u64(seed);
     
         for _ in 0..100 {
             let x = rng.gen_range(0.0..600.0);
@@ -226,7 +232,8 @@ impl Fish {
     }
 }
 
-impl App {
+impl<'a> App<'a>
+{
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
 
@@ -235,6 +242,9 @@ impl App {
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
         let fishes = &self.state.fishes;
+
+        let glyph_cache = &mut self.glyph_cache;
+
         self.gl.draw(args.viewport(), |c, gl| {
             // Clear the screen.
             clear(BLACK, gl);
@@ -256,6 +266,9 @@ impl App {
 
                 let center = ellipse::circle(fish.x, fish.y, 2.0);
                 ellipse(RED, center, identity, gl);
+
+                let t = identity.trans(100.0, 100.0);
+                text(RED, 100, "tetten", glyph_cache, t, gl).unwrap();
             }
         });
     }
@@ -275,12 +288,22 @@ fn main() {
         .exit_on_esc(true)
         .build()
         .unwrap();
+    
+
+    let texture_settings = TextureSettings::new().filter(Filter::Nearest);
+    let glyphs = GlyphCache::new("assets/ZenLoop-Italic.ttf", (), texture_settings)
+        .expect("Could not load font");
+
+    let seed: u64 = 127002;
 
     // Create a new game and run it.
     let mut app = App {
         gl: GlGraphics::new(opengl),
-        state: State::new(),
+        state: State::new(seed),
+        glyph_cache: glyphs,
     };
+
+  
 
     let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
