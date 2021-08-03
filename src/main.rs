@@ -26,12 +26,12 @@ pub struct App<'a> {
 }
 
 
-
+#[derive(Clone, Debug)]
 pub struct State {
     fishes: Vec<Fish>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Vec2 {
     pub x: f64,
     pub y: f64,
@@ -85,8 +85,11 @@ impl State {
             let x = rng.gen_range(0.0..600.0);
             let y = rng.gen_range(0.0..600.0);
             let radius = rng.gen_range(5.0..1000.0);
+
+            let run_away: bool = rng.gen();
+            let program = if run_away { run_away_program() } else { run_towards_program() } ;
     
-            let fish = Fish::new(x, y, radius);
+            let fish = Fish::new(x, y, radius, program);
             fishes.push(fish);
         }
 
@@ -139,41 +142,25 @@ impl State {
         }
     }
 }
-
+#[derive(Clone, Debug)]
 pub struct Fish {
     x: f64,
     y: f64,
     energy: f64,
+    program: Program,
 }
 
 fn behave_fishes(state: &mut State, delta_time: f64) {
     let fishes = &mut state.fishes;
     for i in 0..fishes.len() {
-
-        let maybe_j = fishes
-            .iter()
-            .enumerate()
-            .filter(|(j, _)| j != &i)
-            .min_by_key(|(_, fish)| NotNan::from_inner(fishes[i].distance(fish)))
-            .map(|(j, _)| j);
-        
-        if let Some(j) = maybe_j {
-            let mut dv = fishes[i].direction_to(&fishes[j]);
-    
-            if fishes[j].energy >= fishes[i].energy {
-                dv = dv.invert();
-            }
-
-            let speed = 10.0;
-            fishes[i].x += speed * delta_time * dv.x;
-            fishes[i].y += speed * delta_time * dv.y;
-        }
+        let action = run_fish(fishes, i);
+        execute_fish_action(&mut fishes[i], action, delta_time);
     }
 }
 
 impl Fish {
-    pub fn new(x: f64, y: f64, energy: f64) -> Self {
-        Fish { x, y, energy }
+    pub fn new(x: f64, y: f64, energy: f64, program: Program) -> Self {
+        Fish { x, y, energy, program }
     }
 
     pub fn radius(&self) -> f64 {
@@ -213,6 +200,11 @@ impl Fish {
         self.y = y;
     }
 
+    pub fn move_by(&mut self, direction: &Vec2) {
+        self.x += direction.x;
+        self.y += direction.y;
+    }
+
     pub fn split(&mut self) -> Fish {
         let mut rng = rand::thread_rng();
         let ax = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
@@ -228,7 +220,7 @@ impl Fish {
         let child_energy = self.energy / 2.5;
         self.move_to(x_1, y_1);
         self.energy = child_energy;
-        Fish::new(x_2, y_2, child_energy)
+        Fish::new(x_2, y_2, child_energy, self.program.clone())
     }
 }
 
@@ -314,5 +306,124 @@ fn main() {
         if let Some(args) = e.update_args() {
             app.update(&args);
         }
+    }
+}
+
+
+
+// THE GREAT BEHAVIOURAL INTERPRETER
+
+// 
+
+#[derive(Clone, Debug)]
+pub struct Program {
+    commands: Vec<Command>
+}
+
+impl Program {
+    pub fn empty() -> Self {
+        Program { commands: vec![] }
+    }
+}
+
+fn run_away_program() -> Program {
+    Program {
+        commands: vec![
+            Command::PushDirectionToClosestFish,
+            Command::InvertVec,
+            Command::MoveInDirection, 
+        ]
+    }
+}
+
+fn run_towards_program() -> Program {
+    Program {
+        commands: vec![
+            Command::PushDirectionToClosestFish,
+            Command::MoveInDirection, 
+        ]
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+enum Command {
+    PushDirectionToClosestFish,
+    InvertVec,
+    MoveInDirection,
+}
+
+#[derive(Clone, Debug)]
+struct StackSet {
+    vec2_stack: Vec<Vec2>,
+}
+
+impl StackSet {
+    pub fn empty() -> Self {
+        StackSet {
+            vec2_stack: Vec::new(),
+        }
+    }
+    
+    pub fn empty_vec2_stack(&self) -> Vec2 {
+        Vec2 { x: 0.0, y: 0.0 }
+    }
+}
+
+// Currently we return on the first action, ultimately we want to allow multiple actions,
+// humans can do that as well, but the cost should increase as the actions (or a singular 
+// parametrized one) does more stuff. E.g. if you move further, it should cost more,
+// and this should ramp up superlinearly. 
+fn run_fish(fishes: &Vec<Fish>, fish_num: usize) -> Action {
+    let mut stack_set = StackSet::empty();
+
+    for command in fishes[fish_num].program.commands.iter() {
+        match command {
+            &Command::PushDirectionToClosestFish => {
+                let maybe_j = fishes
+                    .iter()
+                    .enumerate()
+                    .filter(|(j, _)| j != &fish_num)
+                    .min_by_key(|(_, fish)| NotNan::from_inner(fishes[fish_num].distance(fish)))
+                    .map(|(j, _)| j);
+            
+                if let Some(j) = maybe_j {
+                    let direction = fishes[fish_num].direction_to(&fishes[j]);
+                    stack_set.vec2_stack.push(direction);
+                }
+    
+            }
+            &Command::InvertVec => {
+                if let Some(direction) = stack_set.vec2_stack.pop() {
+                    stack_set.vec2_stack.push(direction.invert());
+                }
+            }
+            &Command::MoveInDirection => {
+                if let Some(direction) = stack_set.vec2_stack.pop() {
+                    return Action::Move(direction);
+                } else {
+                    return Action::Move(stack_set.empty_vec2_stack())
+                }
+            }
+        }
+    }
+
+    return Action::Pass;
+
+}
+
+#[derive(Copy, Clone, Debug)]
+enum Action {
+    Pass,
+    Move(Vec2)
+}
+
+fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
+    let move_speed: f64 = 10.0;
+    use Action::*;
+    match action {
+        Move(direction) => {
+            fish.move_by(&(direction * delta_time * move_speed));
+        }
+        Pass => (),
     }
 }
