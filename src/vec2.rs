@@ -9,6 +9,10 @@ impl Vec2 {
         Vec2 { x, y }
     }
 
+    pub fn zero() -> Self {
+        Vec2 { x: 0.0, y: 0.0 }
+    }
+
     pub fn length(&self) -> f64 {
         (self.x.powi(2) + self.y.powi(2)).sqrt()
     }

@@ -87,7 +87,7 @@ impl State {
             let radius = rng.gen_range(5.0..1000.0);
 
             let run_away: bool = rng.gen();
-            let program = if run_away { run_away_program() } else { run_towards_program() } ;
+            let program = run_towards_program();
     
             let fish = Fish::new(x, y, radius, program);
             fishes.push(fish);
