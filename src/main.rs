@@ -14,10 +14,55 @@ use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
 use piston::window::WindowSettings;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use decorum::NotNan;
+
+mod languages;
+mod vec2;
+
+use languages::lang::*;
+
+use vec2::Vec2;
 
 const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
+
+fn main() {
+    // Change this to OpenGL::V2_1 if not working.
+    let opengl = OpenGL::V3_2;
+
+    // Create an Glutin window.
+    let mut window: Window = WindowSettings::new("static-circle", [600, 600])
+        .graphics_api(opengl)
+        .exit_on_esc(true)
+        .build()
+        .unwrap();
+    
+
+    let texture_settings = TextureSettings::new().filter(Filter::Nearest);
+    let glyphs = GlyphCache::new("assets/ZenLoop-Italic.ttf", (), texture_settings)
+        .expect("Could not load font");
+
+    let seed: u64 = 127002;
+
+    // Create a new game and run it.
+    let mut app = App {
+        gl: GlGraphics::new(opengl),
+        state: State::new(seed),
+        glyph_cache: glyphs,
+    };
+
+  
+
+    let mut events = Events::new(EventSettings::new());
+    while let Some(e) = events.next(&mut window) {
+        if let Some(args) = e.render_args() {
+            app.render(&args);
+        }
+
+        if let Some(args) = e.update_args() {
+            app.update(&args);
+        }
+    }
+}
 
 pub struct App<'a> {
     gl: GlGraphics, // OpenGL drawing backend.
@@ -26,54 +71,9 @@ pub struct App<'a> {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct State {
     fishes: Vec<Fish>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Vec2 {
-    pub x: f64,
-    pub y: f64,
-}
-
-impl Vec2 {
-    fn new(x: f64, y: f64) -> Self {
-        Vec2 { x, y }
-    }
-
-    fn length(&self) -> f64 {
-        (self.x.powi(2) + self.y.powi(2)).sqrt()
-    }
-
-    fn invert(&self) -> Vec2 {
-        Vec2 {
-            x: -self.x,
-            y: -self.y,
-        }
-    }
-}
-
-impl std::ops::Div<f64> for Vec2 {
-    type Output = Vec2;
-
-    fn div(self, rhs: f64) -> Self::Output {
-        Vec2 {
-            x: self.x / rhs,
-            y: self.y / rhs,
-        }
-    }
-}
-
-impl std::ops::Mul<f64> for Vec2 {
-    type Output = Vec2;
-
-    fn mul(self, rhs: f64) -> Self::Output {
-        Vec2 {
-            x: self.x * rhs,
-            y: self.y * rhs,
-        }
-    }
 }
 
 impl State {
@@ -142,7 +142,8 @@ impl State {
         }
     }
 }
-#[derive(Clone, Debug)]
+
+#[derive(Clone)]
 pub struct Fish {
     x: f64,
     y: f64,
@@ -270,149 +271,8 @@ impl<'a> App<'a>
     }
 }
 
-fn main() {
-    // Change this to OpenGL::V2_1 if not working.
-    let opengl = OpenGL::V3_2;
-
-    // Create an Glutin window.
-    let mut window: Window = WindowSettings::new("static-circle", [600, 600])
-        .graphics_api(opengl)
-        .exit_on_esc(true)
-        .build()
-        .unwrap();
-    
-
-    let texture_settings = TextureSettings::new().filter(Filter::Nearest);
-    let glyphs = GlyphCache::new("assets/ZenLoop-Italic.ttf", (), texture_settings)
-        .expect("Could not load font");
-
-    let seed: u64 = 127002;
-
-    // Create a new game and run it.
-    let mut app = App {
-        gl: GlGraphics::new(opengl),
-        state: State::new(seed),
-        glyph_cache: glyphs,
-    };
-
-  
-
-    let mut events = Events::new(EventSettings::new());
-    while let Some(e) = events.next(&mut window) {
-        if let Some(args) = e.render_args() {
-            app.render(&args);
-        }
-
-        if let Some(args) = e.update_args() {
-            app.update(&args);
-        }
-    }
-}
-
-
-
-// THE GREAT BEHAVIOURAL INTERPRETER
-
-// 
-
-#[derive(Clone, Debug)]
-pub struct Program {
-    commands: Vec<Command>
-}
-
-impl Program {
-    pub fn empty() -> Self {
-        Program { commands: vec![] }
-    }
-}
-
-fn run_away_program() -> Program {
-    Program {
-        commands: vec![
-            Command::PushDirectionToClosestFish,
-            Command::InvertVec,
-            Command::MoveInDirection, 
-        ]
-    }
-}
-
-fn run_towards_program() -> Program {
-    Program {
-        commands: vec![
-            Command::PushDirectionToClosestFish,
-            Command::MoveInDirection, 
-        ]
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
-enum Command {
-    PushDirectionToClosestFish,
-    InvertVec,
-    MoveInDirection,
-}
-
-#[derive(Clone, Debug)]
-struct StackSet {
-    vec2_stack: Vec<Vec2>,
-}
-
-impl StackSet {
-    pub fn empty() -> Self {
-        StackSet {
-            vec2_stack: Vec::new(),
-        }
-    }
-    
-    pub fn empty_vec2_stack(&self) -> Vec2 {
-        Vec2 { x: 0.0, y: 0.0 }
-    }
-}
-
-// Currently we return on the first action, ultimately we want to allow multiple actions,
-// humans can do that as well, but the cost should increase as the actions (or a singular 
-// parametrized one) does more stuff. E.g. if you move further, it should cost more,
-// and this should ramp up superlinearly. 
-fn run_fish(fishes: &Vec<Fish>, fish_num: usize) -> Action {
-    let mut stack_set = StackSet::empty();
-
-    for command in fishes[fish_num].program.commands.iter() {
-        match command {
-            &Command::PushDirectionToClosestFish => {
-                let maybe_j = fishes
-                    .iter()
-                    .enumerate()
-                    .filter(|(j, _)| j != &fish_num)
-                    .min_by_key(|(_, fish)| NotNan::from_inner(fishes[fish_num].distance(fish)))
-                    .map(|(j, _)| j);
-            
-                if let Some(j) = maybe_j {
-                    let direction = fishes[fish_num].direction_to(&fishes[j]);
-                    stack_set.vec2_stack.push(direction);
-                }
-    
-            }
-            &Command::InvertVec => {
-                if let Some(direction) = stack_set.vec2_stack.pop() {
-                    stack_set.vec2_stack.push(direction.invert());
-                }
-            }
-            &Command::MoveInDirection => {
-                if let Some(direction) = stack_set.vec2_stack.pop() {
-                    return Action::Move(direction);
-                } else {
-                    return Action::Move(stack_set.empty_vec2_stack())
-                }
-            }
-        }
-    }
-
-    return Action::Pass;
-
-}
-
-#[derive(Copy, Clone, Debug)]
-enum Action {
+pub enum Action {
     Pass,
     Move(Vec2)
 }
