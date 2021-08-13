@@ -30,7 +30,7 @@ fn main() {
     let opengl = OpenGL::V3_2;
 
     // Create an Glutin window.
-    let mut window: Window = WindowSettings::new("static-circle", [600, 600])
+    let mut window: Window = WindowSettings::new("static-but-internal-circle", [MAX_X, MAX_Y])
         .graphics_api(opengl)
         .exit_on_esc(true)
         .build()
@@ -82,8 +82,8 @@ impl State {
         let mut rng = ChaCha20Rng::seed_from_u64(seed);
     
         for _ in 0..100 {
-            let x = rng.gen_range(0.0..600.0);
-            let y = rng.gen_range(0.0..600.0);
+            let x = rng.gen_range(0.0..MAX_X);
+            let y = rng.gen_range(0.0..MAX_Y);
             let radius = rng.gen_range(5.0..1000.0);
 
             let run_away: bool = rng.gen();
@@ -283,6 +283,7 @@ fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
     match action {
         Move(direction) => {
             fish.move_by(&(direction * delta_time * move_speed));
+            fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y))
         }
         Pass => (),
     }
