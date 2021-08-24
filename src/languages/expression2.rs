@@ -26,9 +26,9 @@ impl Program {
         }
     }
 
-    // pub fn size(&self) -> u64 {
-    //     return self.root.n_children();
-    // }
+    pub fn size(&self) -> u64 {
+        return self.root.size();
+    }
 
     pub fn mutate(&mut self) {
         todo!()
@@ -144,9 +144,23 @@ fn generate_f64_expr(mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
     })
 }
 
+// trait Mutable {
+//     fn mutate(&self) -> Self;
+// }
+
+// impl<T> Mutable for BoxedExpr<T> {
+//     fn mutate(&self) -> BoxedExpr<T> {
+//         self.mutate()
+//     }
+// }
+
 /// Expression that evaluates to T
 trait Expr<T>: ExprClone<T> {
     fn eval(&self, s: &InterpreterState) -> T;
+
+    fn size(&self) -> u64;
+
+    // fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<T>;
 }
 
 // https://stackoverflow.com/questions/30353462/how-to-clone-a-struct-storing-a-boxed-trait-object
@@ -180,6 +194,10 @@ impl Expr<FishRef> for GetSelfExpr {
             maybe_fish_num: Some(state.fish_num),
         }
     }
+
+    fn size(&self) -> u64 {
+        1
+    }
 }
 
 #[derive(Clone)]
@@ -203,6 +221,10 @@ impl Expr<FishRef> for DichtsteVisExpr {
             maybe_fish_num: maybe_j,
         }
     }
+
+    fn size(&self) -> u64 {
+        1
+    }
 }
 #[derive(Clone)]
 struct FishEnergyExpr {
@@ -218,6 +240,10 @@ impl Expr<NotNan<f64>> for FishEnergyExpr {
         } else {
             NotNan::from(0.0)
         }
+    }
+
+    fn size(&self) -> u64 {
+        1 + self.fish.size()
     }
 }
 
@@ -241,6 +267,10 @@ impl Expr<Vec2> for FishDirectionExpr {
             _ => Vec2::zero(),
         }
     }
+
+    fn size(&self) -> u64 {
+        1 + self.origin.size() + self.target.size()
+    }
 }
 
 #[derive(Clone)]
@@ -254,6 +284,10 @@ where
 {
     fn eval(&self, _: &InterpreterState) -> T {
         return self.value.clone();
+    }
+
+    fn size(&self) -> u64 {
+        1
     }
 }
 
@@ -270,6 +304,10 @@ where
     fn eval(&self, state: &InterpreterState) -> bool {
         self.left.eval(state) < self.right.eval(state)
     }
+
+    fn size(&self) -> u64 {
+        1 + self.left.size() + self.right.size()
+    }
 }
 
 #[derive(Clone)]
@@ -285,6 +323,10 @@ where
     fn eval(&self, state: &InterpreterState) -> T {
         return self.left.eval(state) + self.right.eval(state);
     }
+
+    fn size(&self) -> u64 {
+        1 + self.left.size() + self.right.size()
+    }
 }
 
 #[derive(Clone)]
@@ -299,6 +341,10 @@ where
     fn eval(&self, state: &InterpreterState) -> T {
         return !self.value.eval(state);
     }
+
+    fn size(&self) -> u64 {
+        1 + self.value.size()
+    }
 }
 
 #[derive(Clone)]
@@ -312,6 +358,10 @@ where
 {
     fn eval(&self, state: &InterpreterState) -> T {
         return -self.value.eval(state);
+    }
+
+    fn size(&self) -> u64 {
+        1 + self.value.size()
     }
 }
 
@@ -333,6 +383,16 @@ where
             self.alternative.eval(state)
         }
     }
+
+    // fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<T> {
+    //     generate_if_expr(generator: F, rng: &mut ExprRng)
+
+    //     T::generate()
+    // }
+
+    fn size(&self) -> u64 {
+        1 + self.condition.size() + self.consequent.size() + self.alternative.size()
+    }
 }
 
 #[derive(Clone)]
@@ -344,5 +404,9 @@ impl Expr<Action> for MoveExpr {
     fn eval(&self, state: &InterpreterState) -> Action {
         let dir_vec = self.direction.eval(state);
         Action::Move(dir_vec)
+    }
+
+    fn size(&self) -> u64 {
+        1 + self.direction.size()
     }
 }
