@@ -3,12 +3,13 @@ extern crate graphics;
 extern crate opengl_graphics;
 extern crate piston;
 extern crate rand;
-// extern crate piston_window;
+#[macro_use]
+extern crate random_branch;
 
-// use graphics::glyph_cache::rusttype::GlyphCache;
-use opengl_graphics::{OpenGL, Filter, GlGraphics, GlyphCache, TextureSettings};
+use decorum::NotNan;
 use glutin_window::GlutinWindow as Window;
 use graphics::ellipse::Border;
+use opengl_graphics::{Filter, GlGraphics, GlyphCache, OpenGL, TextureSettings};
 use piston::event_loop::{EventSettings, Events};
 use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
 use piston::window::WindowSettings;
@@ -35,7 +36,6 @@ fn main() {
         .exit_on_esc(true)
         .build()
         .unwrap();
-    
 
     let texture_settings = TextureSettings::new().filter(Filter::Nearest);
     let glyphs = GlyphCache::new("assets/ZenLoop-Italic.ttf", (), texture_settings)
@@ -49,8 +49,6 @@ fn main() {
         state: State::new(seed),
         glyph_cache: glyphs,
     };
-
-  
 
     let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
@@ -70,7 +68,6 @@ pub struct App<'a> {
     glyph_cache: GlyphCache<'a>,
 }
 
-
 #[derive(Clone)]
 pub struct State {
     fishes: Vec<Fish>,
@@ -80,16 +77,14 @@ impl State {
     fn new(seed: u64) -> Self {
         let mut fishes = Vec::new();
         let mut rng = ChaCha20Rng::seed_from_u64(seed);
-    
         for _ in 0..100 {
             let x = rng.gen_range(0.0..MAX_X);
             let y = rng.gen_range(0.0..MAX_Y);
             let radius = rng.gen_range(5.0..1000.0);
 
-            let run_away: bool = rng.gen();
-            let program = run_towards_program();
-    
-            let fish = Fish::new(x, y, radius, program);
+            // let program = run_towards_program();
+            let program = Program::random(&mut rng);
+            let fish = Fish::new(x, y, NotNan::from_inner(radius), program);
             fishes.push(fish);
         }
 
@@ -124,7 +119,7 @@ impl State {
         behave_fishes(self, delta_time);
 
         let fishes = &mut self.fishes;
-        fishes.sort_by(|a, b| (a.energy).partial_cmp(&b.energy).unwrap().reverse());
+        fishes.sort_by_key(|f| -f.energy);
 
         // Fishes eat other fishes
         let mut i = 0;
@@ -143,11 +138,13 @@ impl State {
     }
 }
 
+pub type Energy = NotNan<f64>;
+
 #[derive(Clone)]
 pub struct Fish {
     x: f64,
     y: f64,
-    energy: f64,
+    energy: Energy,
     program: Program,
 }
 
@@ -160,12 +157,17 @@ fn behave_fishes(state: &mut State, delta_time: f64) {
 }
 
 impl Fish {
-    pub fn new(x: f64, y: f64, energy: f64, program: Program) -> Self {
-        Fish { x, y, energy, program }
+    pub fn new(x: f64, y: f64, energy: Energy, program: Program) -> Self {
+        Fish {
+            x,
+            y,
+            energy,
+            program,
+        }
     }
 
     pub fn radius(&self) -> f64 {
-        (self.energy / std::f64::consts::PI).cbrt()
+        (self.energy / std::f64::consts::PI).into_inner().cbrt()
     }
 
     pub fn surface_area(&self) -> f64 {
@@ -175,14 +177,12 @@ impl Fish {
     pub fn distance(&self, other: &Fish) -> f64 {
         self.displacement_to(other).length()
     }
-    
     // Verplaatsingsvector naar. Ha. Blub. Blub. I'm coming to get you.
     pub fn displacement_to(&self, other: &Fish) -> Vec2 {
         let dx = other.x - self.x;
         let dy = other.y - self.y;
-        return Vec2::new(dx, dy); 
+        return Vec2::new(dx, dy);
     }
-    
     pub fn direction_to(&self, other: &Fish) -> Vec2 {
         let displacement_to = self.displacement_to(other);
         displacement_to / displacement_to.length()
@@ -225,8 +225,7 @@ impl Fish {
     }
 }
 
-impl<'a> App<'a>
-{
+impl<'a> App<'a> {
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
 
@@ -274,7 +273,7 @@ impl<'a> App<'a>
 #[derive(Copy, Clone, Debug)]
 pub enum Action {
     Pass,
-    Move(Vec2)
+    Move(Vec2),
 }
 
 fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
