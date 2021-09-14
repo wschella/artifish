@@ -8,7 +8,7 @@ use std::cmp::Ord;
 // THE GREAT BEHAVIOURAL INTERPRETER
 #[derive(Clone)]
 pub struct Program {
-    root: Box<dyn Expr<Action>>,
+    root: BoxedExpr<Action>,
 }
 
 impl Program {
@@ -30,8 +30,10 @@ impl Program {
         return self.root.size();
     }
 
-    pub fn mutate(&mut self) {
-        todo!()
+    pub fn mutate(&mut self, rng: &mut ExprRng) -> Self {
+        Program {
+            root: self.root.mutate(rng),
+        }
     }
 }
 
@@ -86,13 +88,16 @@ type BoxedExpr<T> = Box<dyn Expr<T>>;
 fn generate_action_expr(mut rng: &mut ExprRng) -> BoxedExpr<Action> {
     branch_using!(rng, {
         generate_move_expr(rng),
-        generate_if_expr(generate_action_expr, rng),
+        // generate_if_expr(generate_action_expr, rng),
     })
 }
 
-fn generate_move_expr(rng: &mut ExprRng) -> BoxedExpr<Action> {
-    Box::new(MoveExpr {
-        direction: generate_direction_expr(rng),
+fn generate_move_expr(mut rng: &mut ExprRng) -> BoxedExpr<Action> {
+    branch_using!(rng, {
+        Box::new(MoveExpr {
+            direction: generate_direction_expr(rng),
+        }),
+        // generate_if_expr(generate_move_expr, rng)
     })
 }
 
@@ -100,13 +105,18 @@ fn generate_move_expr(rng: &mut ExprRng) -> BoxedExpr<Action> {
 fn generate_direction_expr(mut rng: &mut ExprRng) -> BoxedExpr<Vec2> {
     branch_using!(rng, {
         Box::new(FishDirectionExpr {
-            origin: Box::new(GetSelfExpr),
-            target: Box::new(DichtsteVisExpr),
+            origin: generate_fish_ref_expr(rng),
+            target: generate_fish_ref_expr(rng),
         }),
-        Box::new(FishDirectionExpr {
-            origin: Box::new(DichtsteVisExpr),
-            target: Box::new(GetSelfExpr),
-        }),
+        // generate_if_expr(generate_direction_expr, rng)
+    })
+}
+
+fn generate_fish_ref_expr(mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
+    branch_using!(rng, {
+        Box::new(GetSelfExpr),
+        Box::new(DichtsteVisExpr),
+        // generate_if_expr(generate_fish_ref_expr, rng)
     })
 }
 
@@ -115,6 +125,7 @@ where
     T: Clone + 'static,
     F: Fn(&mut ExprRng) -> BoxedExpr<T>,
 {
+    dbg!("test");
     Box::new(IfExpr {
         condition: generate_bool_expr(rng),
         consequent: generator(rng),
@@ -129,38 +140,48 @@ fn generate_bool_expr(mut rng: &mut ExprRng) -> BoxedExpr<bool> {
         Box::new(LessThenExpr {
              left: generate_f64_expr(rng),
              right: generate_f64_expr(rng)
-        })
+        }),
+        // generate_if_expr(generate_bool_expr, rng)
     })
 }
 
 fn generate_f64_expr(mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
     branch_using!(rng, {
+        // TODO: Generate random f64
         Box::new(FishEnergyExpr {
             fish: Box::new(GetSelfExpr),
         }),
         Box::new(FishEnergyExpr {
             fish: Box::new(DichtsteVisExpr),
         }),
+        // generate_if_expr(generate_f64_expr, rng)
     })
 }
 
-// trait Mutable {
-//     fn mutate(&self) -> Self;
-// }
+fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng) -> BoxedExpr<T> {
+    branch_using!(rng, {
+        Box::new(IfExpr {
+            condition: generate_bool_expr(rng),
+            consequent: expr.clone_box(),
+            alternative: expr.mutate(rng),
+        }),
+        Box::new(IfExpr {
+            condition: generate_bool_expr(rng),
+            consequent: expr.mutate(rng),
+            alternative: expr.clone_box(),
+        })
+    })
+}
 
-// impl<T> Mutable for BoxedExpr<T> {
-//     fn mutate(&self) -> BoxedExpr<T> {
-//         self.mutate()
-//     }
-// }
+trait Mutable<T> {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<T>;
+}
 
 /// Expression that evaluates to T
-trait Expr<T>: ExprClone<T> {
+trait Expr<T>: ExprClone<T> + Mutable<T> {
     fn eval(&self, s: &InterpreterState) -> T;
 
     fn size(&self) -> u64;
-
-    // fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<T>;
 }
 
 // https://stackoverflow.com/questions/30353462/how-to-clone-a-struct-storing-a-boxed-trait-object
@@ -199,6 +220,11 @@ impl Expr<FishRef> for GetSelfExpr {
         1
     }
 }
+impl Mutable<FishRef> for GetSelfExpr {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<FishRef> {
+        generate_fish_ref_expr(rng)
+    }
+}
 
 #[derive(Clone)]
 struct DichtsteVisExpr;
@@ -226,6 +252,13 @@ impl Expr<FishRef> for DichtsteVisExpr {
         1
     }
 }
+
+impl Mutable<FishRef> for DichtsteVisExpr {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<FishRef> {
+        generate_fish_ref_expr(rng)
+    }
+}
+
 #[derive(Clone)]
 struct FishEnergyExpr {
     fish: Box<dyn Expr<FishRef>>,
@@ -244,6 +277,11 @@ impl Expr<NotNan<f64>> for FishEnergyExpr {
 
     fn size(&self) -> u64 {
         1 + self.fish.size()
+    }
+}
+impl Mutable<NotNan<f64>> for FishEnergyExpr {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
+        generate_f64_expr(rng)
     }
 }
 
@@ -272,6 +310,11 @@ impl Expr<Vec2> for FishDirectionExpr {
         1 + self.origin.size() + self.target.size()
     }
 }
+impl Mutable<Vec2> for FishDirectionExpr {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<Vec2> {
+        generate_direction_expr(rng)
+    }
+}
 
 #[derive(Clone)]
 struct ConstExpr<T> {
@@ -280,6 +323,7 @@ struct ConstExpr<T> {
 
 impl<T> Expr<T> for ConstExpr<T>
 where
+    Self: Mutable<T>,
     T: Clone + 'static,
 {
     fn eval(&self, _: &InterpreterState) -> T {
@@ -288,6 +332,24 @@ where
 
     fn size(&self) -> u64 {
         1
+    }
+}
+
+impl Mutable<NotNan<f64>> for ConstExpr<NotNan<f64>> {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
+        generate_f64_expr(rng)
+    }
+}
+
+impl Mutable<Action> for ConstExpr<Action> {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<Action> {
+        generate_action_expr(rng)
+    }
+}
+
+impl Mutable<bool> for ConstExpr<bool> {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<bool> {
+        generate_bool_expr(rng)
     }
 }
 
@@ -310,6 +372,26 @@ where
     }
 }
 
+impl<T> Mutable<bool> for LessThenExpr<T>
+where
+    T: Ord + Clone + 'static,
+{
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<bool> {
+        branch_using!(rng, {
+            generate_bool_expr(rng),
+            wrap_in_generic::<bool>(self, rng),
+            Box::new(LessThenExpr {
+                left: self.left.clone(),
+                right: self.right.mutate(rng),
+            }),
+            Box::new(LessThenExpr {
+                left: self.left.mutate(rng),
+                right: self.right.clone(),
+            })
+        })
+    }
+}
+
 #[derive(Clone)]
 struct AddExpr<T> {
     left: BoxedExpr<T>,
@@ -326,6 +408,31 @@ where
 
     fn size(&self) -> u64 {
         1 + self.left.size() + self.right.size()
+    }
+}
+// impl Mutable<NotNan<f64>> for AddExpr<NotNan<f64>> {
+//     fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
+//         todo!()
+//     }
+// }
+
+impl<T> Mutable<T> for AddExpr<T>
+where
+    T: std::ops::Add<Output = T> + Clone + 'static,
+{
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
+        branch_using!(rng, {
+            self.left.clone(),
+            self.right.clone(),
+            Box::new(AddExpr {
+                left: self.left.clone(),
+                right: self.mutate(rng),
+            }),
+            Box::new(AddExpr {
+                left: self.left.mutate(rng),
+                right: self.right.clone(),
+            })
+        })
     }
 }
 
@@ -346,6 +453,19 @@ where
         1 + self.value.size()
     }
 }
+impl<T> Mutable<T> for NotExpr<T>
+where
+    T: std::ops::Not<Output = T> + Clone + 'static,
+{
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
+        branch_using!(rng, {
+            self.value.clone(),
+            Box::new(NotExpr {
+                value: self.value.mutate(rng),
+            })
+        })
+    }
+}
 
 #[derive(Clone)]
 struct NegateExpr<T> {
@@ -362,6 +482,19 @@ where
 
     fn size(&self) -> u64 {
         1 + self.value.size()
+    }
+}
+impl<T> Mutable<T> for NegateExpr<T>
+where
+    T: std::ops::Neg<Output = T> + Clone + 'static,
+{
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
+        branch_using!(rng, {
+            self.value.clone(),
+            Box::new(NegateExpr {
+                value: self.value.mutate(rng),
+            })
+        })
     }
 }
 
@@ -384,14 +517,34 @@ where
         }
     }
 
-    // fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<T> {
-    //     generate_if_expr(generator: F, rng: &mut ExprRng)
-
-    //     T::generate()
-    // }
-
     fn size(&self) -> u64 {
         1 + self.condition.size() + self.consequent.size() + self.alternative.size()
+    }
+}
+impl<T> Mutable<T> for IfExpr<T>
+where
+    T: Clone + 'static,
+{
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
+        branch_using!(rng, {
+            self.consequent.clone(),
+            self.alternative.clone(),
+            Box::new(IfExpr {
+                condition: self.condition.mutate(rng),
+                consequent: self.consequent.clone(),
+                alternative: self.alternative.clone(),
+            }),
+            Box::new(IfExpr {
+                condition: self.condition.clone(),
+                consequent: self.consequent.mutate(rng),
+                alternative: self.alternative.clone(),
+            }),
+            Box::new(IfExpr {
+                condition: self.condition.clone(),
+                consequent: self.consequent.clone(),
+                alternative: self.alternative.mutate(rng),
+            })
+        })
     }
 }
 
@@ -408,5 +561,12 @@ impl Expr<Action> for MoveExpr {
 
     fn size(&self) -> u64 {
         1 + self.direction.size()
+    }
+}
+impl Mutable<Action> for MoveExpr {
+    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<Action> {
+        Box::new(MoveExpr {
+            direction: self.direction.mutate(rng),
+        })
     }
 }

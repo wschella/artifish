@@ -185,6 +185,10 @@ impl Fish {
     }
     pub fn direction_to(&self, other: &Fish) -> Vec2 {
         let displacement_to = self.displacement_to(other);
+        // TODO: This is not what we really want, we should return an option or smth
+        if displacement_to.length() == 0.0 {
+            return Vec2::zero();
+        }
         displacement_to / displacement_to.length()
     }
 
