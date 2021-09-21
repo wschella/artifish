@@ -83,7 +83,7 @@ impl State {
             let radius = rng.gen_range(5.0..1000.0);
 
             // let program = run_towards_program();
-            let program = Program::random(&mut rng);
+            let program = Program::random(&mut rng, 42);
             let fish = Fish::new(x, y, NotNan::from_inner(radius), program);
             fishes.push(fish);
         }

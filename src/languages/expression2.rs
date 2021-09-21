@@ -20,9 +20,9 @@ impl Program {
         }
     }
 
-    pub fn random(rng: &mut ExprRng) -> Self {
+    pub fn random(rng: &mut ExprRng, max_depth: usize) -> Self {
         Program {
-            root: generate_action_expr(rng),
+            root: generate_action_expr(rng, max_depth),
         }
     }
 
@@ -37,33 +37,79 @@ impl Program {
     }
 }
 
-pub fn run_towards_program() -> Program {
-    Program {
-        root: Box::new(MoveExpr {
-            direction: Box::new(IfExpr {
-                // if dichtste_vis.energy < self.energy
-                condition: Box::new(LessThenExpr {
-                    left: Box::new(FishEnergyExpr {
-                        fish: Box::new(DichtsteVisExpr),
-                    }),
-                    right: Box::new(FishEnergyExpr {
-                        fish: Box::new(GetSelfExpr),
-                    }),
-                }),
-                // then move towards
-                consequent: Box::new(FishDirectionExpr {
-                    origin: Box::new(GetSelfExpr),
-                    target: Box::new(DichtsteVisExpr),
-                }),
-                // else run away
-                alternative: Box::new(FishDirectionExpr {
-                    origin: Box::new(DichtsteVisExpr),
-                    target: Box::new(GetSelfExpr),
-                }),
-            }),
-        }),
-    }
+macro_rules! generate_tree {
+    ( $depth:expr, $rng: ident,
+        0 => { $( $leaf:expr ),* $(,)? },
+        1 => { $( $depth1:expr ),* $(,)? },
+        2 => { $( $depth2:expr ),* $(,)? }$(,)?
+    ) => {
+        match $depth {
+            0 => {
+                branch_using!($rng, {
+                    $( $leaf, )*
+                })
+            },
+            1 => {
+                branch_using!($rng, {
+                    $( $leaf, )*
+                    $( $depth1, )*
+                })
+            },
+            _ => {
+                branch_using!($rng, {
+                    $( $leaf, )*
+                    $( $depth1, )*
+                    $( $depth2, )*
+                })
+            }
+        }
+    };
+    ( $depth:expr, $rng: ident,
+        { $( $leaf:expr ),* $(,)? },
+        { $( $recursive:expr ),* $(,)? }
+    ) => {
+       if $depth == 0 {
+           branch_using!($rng, {
+               $( $leaf, )*
+           })
+       } else {
+           branch_using!($rng, {
+               $( $leaf, )*
+               $( $recursive, )*
+           })
+       }
+   }
+
 }
+
+
+// pub fn run_towards_program() -> Program {
+//     Program {
+//         root: Box::new(MoveExpr {
+//             direction: Box::new(IfExpr {
+//                 // if dichtste_vis.energy < self.energy
+//                 condition: Box::new(LessThenExpr {
+//                     left: Box::new(FishEnergyExpr {
+//                         fish: Box::new(DichtsteVisExpr),
+//                     }),
+//                     right: Box::new(FishEnergyExpr {
+//                         fish: Box::new(GetSelfExpr),
+//                     }),
+//                 }),
+//                 // then move towards
+//                 consequent: Box::new(FishDirectionExpr {
+//                     origin: Box::new(GetSelfExpr),
+//                     target: Box::new(DichtsteVisExpr),
+//                 }),
+//                 // else run away
+//                 alternative: Box::new(FishDirectionExpr {
+//                     origin: Box::new(DichtsteVisExpr),
+//                     target: Box::new(GetSelfExpr),
+//                 }),
+//             }),
+//         }),
+//     }
+// }
 
 pub fn run_fish(fishes: &Vec<Fish>, fish_num: usize) -> Action {
     let state = InterpreterState { fishes, fish_num };
@@ -85,88 +131,116 @@ impl<'a> InterpreterState<'a> {
 type ExprRng = ChaCha20Rng;
 type BoxedExpr<T> = Box<dyn Expr<T>>;
 
-fn generate_action_expr(mut rng: &mut ExprRng) -> BoxedExpr<Action> {
-    branch_using!(rng, {
-        generate_move_expr(rng),
-        // generate_if_expr(generate_action_expr, rng),
+fn generate_action_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Action> {
+    assert!(max_depth >= MOVE_MIN);
+    generate_tree!(max_depth - MOVE_MIN, rng, {
+        generate_move_expr(rng, max_depth),
+    }, {
+        generate_if_expr(generate_action_expr, rng, max_depth),
     })
 }
 
-fn generate_move_expr(mut rng: &mut ExprRng) -> BoxedExpr<Action> {
-    branch_using!(rng, {
+const MOVE_MIN: usize = DIRECTION_MIN + 1;
+fn generate_move_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Action> {
+    assert!(max_depth >= MOVE_MIN);
+    generate_tree!(max_depth - MOVE_MIN, rng, {
         Box::new(MoveExpr {
-            direction: generate_direction_expr(rng),
+            direction: generate_direction_expr(rng, max_depth - 1),
         }),
-        // generate_if_expr(generate_move_expr, rng)
+    }, {
+        generate_if_expr(generate_move_expr, rng, max_depth)
     })
 }
 
 // TODO: this is not what we want longterm
-fn generate_direction_expr(mut rng: &mut ExprRng) -> BoxedExpr<Vec2> {
-    branch_using!(rng, {
+const DIRECTION_MIN: usize = FISH_REF_MIN + 1;
+fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Vec2> {
+    assert!(max_depth >= DIRECTION_MIN);
+    generate_tree!(max_depth - DIRECTION_MIN, rng, {
         Box::new(FishDirectionExpr {
-            origin: generate_fish_ref_expr(rng),
-            target: generate_fish_ref_expr(rng),
+            origin: generate_fish_ref_expr(rng, max_depth - 1),
+            target: generate_fish_ref_expr(rng, max_depth - 1),
         }),
-        // generate_if_expr(generate_direction_expr, rng)
+     }, {
+        generate_if_expr(generate_direction_expr, rng, max_depth)
     })
 }
 
-fn generate_fish_ref_expr(mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
-    branch_using!(rng, {
+const FISH_REF_MIN: usize = 0;
+fn generate_fish_ref_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<FishRef> {
+    generate_tree!(max_depth, rng, {
         Box::new(GetSelfExpr),
         Box::new(DichtsteVisExpr),
-        // generate_if_expr(generate_fish_ref_expr, rng)
+    }, {
+        generate_if_expr(generate_fish_ref_expr, rng, max_depth),
     })
 }
 
-fn generate_if_expr<F, T>(generator: F, rng: &mut ExprRng) -> BoxedExpr<T>
+fn generate_if_expr<F, T>(generator: F, rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<T>
 where
     T: Clone + 'static,
-    F: Fn(&mut ExprRng) -> BoxedExpr<T>,
+    F: Fn(&mut ExprRng, usize) -> BoxedExpr<T>,
 {
-    dbg!("test");
+    assert!(max_depth >= 1);
     Box::new(IfExpr {
-        condition: generate_bool_expr(rng),
-        consequent: generator(rng),
-        alternative: generator(rng),
+        condition: generate_bool_expr(rng, max_depth - 1),
+        consequent: generator(rng, max_depth - 1),
+        alternative: generator(rng, max_depth -1),
     })
 }
 
-fn generate_bool_expr(mut rng: &mut ExprRng) -> BoxedExpr<bool> {
-    branch_using!(rng, {
-        Box::new(ConstExpr { value: true }),
-        Box::new(ConstExpr { value: false }),
+// macro_rules! expr {
+//     ( Const( $value:expr )) => {
+//         Box::new(ConstExpr::new($value))
+//     };
+//     ( $expr:expr ) => {
+//         $expr
+//     }
+// }
+
+fn generate_bool_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<bool> {
+    generate_tree!(max_depth, rng,
+    0 => {
+        Box::new(ConstExpr::new(true)),
+        Box::new(ConstExpr::new(false))
+    }, 
+    1 => {
+        generate_if_expr(generate_bool_expr, rng, max_depth)
+    },
+    2 => {
         Box::new(LessThenExpr {
-             left: generate_f64_expr(rng),
-             right: generate_f64_expr(rng)
+            left: generate_f64_expr(rng, max_depth - 1),
+            right: generate_f64_expr(rng, max_depth - 1)
         }),
-        // generate_if_expr(generate_bool_expr, rng)
-    })
+    },)
 }
 
-fn generate_f64_expr(mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
-    branch_using!(rng, {
+const F64_MIN: usize = 1;
+fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<NotNan<f64>> {
+    assert!(max_depth > 0);
+    generate_tree!(max_depth - F64_MIN, rng, {
         // TODO: Generate random f64
         Box::new(FishEnergyExpr {
             fish: Box::new(GetSelfExpr),
         }),
         Box::new(FishEnergyExpr {
             fish: Box::new(DichtsteVisExpr),
-        }),
-        // generate_if_expr(generate_f64_expr, rng)
+        })
+    },
+    {
+        generate_if_expr(generate_f64_expr, rng, max_depth)
     })
 }
 
 fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng) -> BoxedExpr<T> {
     branch_using!(rng, {
         Box::new(IfExpr {
-            condition: generate_bool_expr(rng),
+            condition: generate_bool_expr(rng, 1),
             consequent: expr.clone_box(),
             alternative: expr.mutate(rng),
         }),
         Box::new(IfExpr {
-            condition: generate_bool_expr(rng),
+            condition: generate_bool_expr(rng, 1),
             consequent: expr.mutate(rng),
             alternative: expr.clone_box(),
         })
@@ -221,8 +295,11 @@ impl Expr<FishRef> for GetSelfExpr {
     }
 }
 impl Mutable<FishRef> for GetSelfExpr {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<FishRef> {
-        generate_fish_ref_expr(rng)
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
+        branch_using!(rng, {
+            generate_fish_ref_expr(rng, 0),
+            wrap_in_generic(self, rng),
+        })
     }
 }
 
@@ -254,8 +331,11 @@ impl Expr<FishRef> for DichtsteVisExpr {
 }
 
 impl Mutable<FishRef> for DichtsteVisExpr {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<FishRef> {
-        generate_fish_ref_expr(rng)
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
+        branch_using!(rng, {
+            wrap_in_generic(self, rng),
+            generate_fish_ref_expr(rng, 0),    
+        })
     }
 }
 
@@ -280,8 +360,11 @@ impl Expr<NotNan<f64>> for FishEnergyExpr {
     }
 }
 impl Mutable<NotNan<f64>> for FishEnergyExpr {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
-        generate_f64_expr(rng)
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
+        branch_using!(rng, {
+            wrap_in_generic(self, rng),
+            generate_f64_expr(rng, 0),
+        })
     }
 }
 
@@ -311,14 +394,23 @@ impl Expr<Vec2> for FishDirectionExpr {
     }
 }
 impl Mutable<Vec2> for FishDirectionExpr {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<Vec2> {
-        generate_direction_expr(rng)
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Vec2> {
+        branch_using!(rng, {
+            wrap_in_generic(self, rng),
+            generate_direction_expr(rng, 0),
+        })
     }
 }
 
 #[derive(Clone)]
 struct ConstExpr<T> {
     value: T,
+}
+
+impl<T> ConstExpr<T> {
+    pub fn new(value: T) -> Self {
+        Self { value: value }
+    }
 }
 
 impl<T> Expr<T> for ConstExpr<T>
@@ -336,20 +428,30 @@ where
 }
 
 impl Mutable<NotNan<f64>> for ConstExpr<NotNan<f64>> {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
-        generate_f64_expr(rng)
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
+        branch_using!(rng, {
+            wrap_in_generic(self, rng),
+            generate_f64_expr(rng, 0),
+        })
     }
 }
 
 impl Mutable<Action> for ConstExpr<Action> {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<Action> {
-        generate_action_expr(rng)
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Action> {
+        branch_using!(rng, {
+            wrap_in_generic(self, rng),
+            generate_action_expr(rng, 0),
+        })
+
     }
 }
 
 impl Mutable<bool> for ConstExpr<bool> {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<bool> {
-        generate_bool_expr(rng)
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<bool> {
+        branch_using!(rng, {
+            wrap_in_generic(self, rng),
+            generate_bool_expr(rng, 0),
+        })
     }
 }
 
@@ -378,7 +480,7 @@ where
 {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<bool> {
         branch_using!(rng, {
-            generate_bool_expr(rng),
+            generate_bool_expr(rng, 0),
             wrap_in_generic::<bool>(self, rng),
             Box::new(LessThenExpr {
                 left: self.left.clone(),
@@ -422,6 +524,7 @@ where
 {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
+            wrap_in_generic::<T>(self, rng),
             self.left.clone(),
             self.right.clone(),
             Box::new(AddExpr {
@@ -459,6 +562,7 @@ where
 {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
+            wrap_in_generic::<T>(self, rng),
             self.value.clone(),
             Box::new(NotExpr {
                 value: self.value.mutate(rng),
@@ -490,6 +594,7 @@ where
 {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
+            wrap_in_generic::<T>(self, rng),
             self.value.clone(),
             Box::new(NegateExpr {
                 value: self.value.mutate(rng),
@@ -527,6 +632,7 @@ where
 {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
+            wrap_in_generic::<T>(self, rng),
             self.consequent.clone(),
             self.alternative.clone(),
             Box::new(IfExpr {
@@ -564,9 +670,12 @@ impl Expr<Action> for MoveExpr {
     }
 }
 impl Mutable<Action> for MoveExpr {
-    fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<Action> {
-        Box::new(MoveExpr {
-            direction: self.direction.mutate(rng),
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Action> {
+        branch_using!(rng, {
+            wrap_in_generic::<Action>(self, rng),
+            Box::new(MoveExpr {
+                direction: self.direction.mutate(rng),
+            })
         })
     }
 }
