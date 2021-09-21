@@ -83,33 +83,33 @@ macro_rules! generate_tree {
 }
 
 
-// pub fn run_towards_program() -> Program {
-//     Program {
-//         root: Box::new(MoveExpr {
-//             direction: Box::new(IfExpr {
-//                 // if dichtste_vis.energy < self.energy
-//                 condition: Box::new(LessThenExpr {
-//                     left: Box::new(FishEnergyExpr {
-//                         fish: Box::new(DichtsteVisExpr),
-//                     }),
-//                     right: Box::new(FishEnergyExpr {
-//                         fish: Box::new(GetSelfExpr),
-//                     }),
-//                 }),
-//                 // then move towards
-//                 consequent: Box::new(FishDirectionExpr {
-//                     origin: Box::new(GetSelfExpr),
-//                     target: Box::new(DichtsteVisExpr),
-//                 }),
-//                 // else run away
-//                 alternative: Box::new(FishDirectionExpr {
-//                     origin: Box::new(DichtsteVisExpr),
-//                     target: Box::new(GetSelfExpr),
-//                 }),
-//             }),
-//         }),
-//     }
-// }
+pub fn smartie() -> Program {
+    Program {
+        root: Box::new(MoveExpr {
+            direction: Box::new(IfExpr {
+                // if dichtste_vis.energy < self.energy
+                condition: Box::new(LessThenExpr {
+                    left: Box::new(FishEnergyExpr {
+                        fish: Box::new(DichtsteVisExpr),
+                    }),
+                    right: Box::new(FishEnergyExpr {
+                        fish: Box::new(GetSelfExpr),
+                    }),
+                }),
+                // then move towards
+                consequent: Box::new(FishDirectionExpr {
+                    origin: Box::new(GetSelfExpr),
+                    target: Box::new(DichtsteVisExpr),
+                }),
+                // else run away
+                alternative: Box::new(FishDirectionExpr {
+                    origin: Box::new(DichtsteVisExpr),
+                    target: Box::new(GetSelfExpr),
+                }),
+            }),
+        }),
+    }
+}
 
 pub fn run_fish(fishes: &Vec<Fish>, fish_num: usize) -> Action {
     let state = InterpreterState { fishes, fish_num };
@@ -131,9 +131,10 @@ impl<'a> InterpreterState<'a> {
 type ExprRng = ChaCha20Rng;
 type BoxedExpr<T> = Box<dyn Expr<T>>;
 
+const ACTION_MIN: usize = MOVE_MIN;
 fn generate_action_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Action> {
-    assert!(max_depth >= MOVE_MIN);
-    generate_tree!(max_depth - MOVE_MIN, rng, {
+    assert!(max_depth >= ACTION_MIN);
+    generate_tree!(max_depth - ACTION_MIN, rng, {
         generate_move_expr(rng, max_depth),
     }, {
         generate_if_expr(generate_action_expr, rng, max_depth),
@@ -297,7 +298,7 @@ impl Expr<FishRef> for GetSelfExpr {
 impl Mutable<FishRef> for GetSelfExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
         branch_using!(rng, {
-            generate_fish_ref_expr(rng, 0),
+            generate_fish_ref_expr(rng, FISH_REF_MIN),
             wrap_in_generic(self, rng),
         })
     }
@@ -334,7 +335,7 @@ impl Mutable<FishRef> for DichtsteVisExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
-            generate_fish_ref_expr(rng, 0),    
+            generate_fish_ref_expr(rng, FISH_REF_MIN),    
         })
     }
 }
@@ -363,7 +364,7 @@ impl Mutable<NotNan<f64>> for FishEnergyExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
-            generate_f64_expr(rng, 0),
+            generate_f64_expr(rng, F64_MIN),
         })
     }
 }
@@ -397,7 +398,7 @@ impl Mutable<Vec2> for FishDirectionExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Vec2> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
-            generate_direction_expr(rng, 0),
+            generate_direction_expr(rng, DIRECTION_MIN),
         })
     }
 }
@@ -431,7 +432,7 @@ impl Mutable<NotNan<f64>> for ConstExpr<NotNan<f64>> {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
-            generate_f64_expr(rng, 0),
+            generate_f64_expr(rng, F64_MIN),
         })
     }
 }
@@ -440,7 +441,7 @@ impl Mutable<Action> for ConstExpr<Action> {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Action> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
-            generate_action_expr(rng, 0),
+            generate_action_expr(rng, ACTION_MIN),
         })
 
     }

@@ -20,11 +20,20 @@ mod languages;
 mod vec2;
 
 use languages::lang::*;
+use languages::lang;
 
 use vec2::Vec2;
 
+const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
 const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
+
+const MOVE_SPEED: f64 = 25.0;
+const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 4.0;
+const FISH_GROWTH_FACTOR: f64 = 1.0;
 
 fn main() {
     // Change this to OpenGL::V2_1 if not working.
@@ -71,6 +80,7 @@ pub struct App<'a> {
 #[derive(Clone)]
 pub struct State {
     fishes: Vec<Fish>,
+    rng: ChaCha20Rng,
 }
 
 impl State {
@@ -83,22 +93,26 @@ impl State {
             let radius = rng.gen_range(5.0..1000.0);
 
             // let program = run_towards_program();
-            let program = Program::random(&mut rng, 42);
+            let program = Program::random(&mut rng, 6);
             let fish = Fish::new(x, y, NotNan::from_inner(radius), program);
             fishes.push(fish);
         }
 
-        Self { fishes }
+        let mut smartie = Fish::new(MAX_X / 2.0, MAX_Y / 2.0, NotNan::from_inner(500.0), lang::smartie());
+        smartie.color = RED;
+        fishes.push(smartie);
+
+        Self { fishes, rng }
     }
 
     fn update(&mut self, delta_time: f64) {
         for fish in self.fishes.iter_mut() {
-            fish.energy += 1.0 * fish.surface_area() * delta_time;
+            fish.energy += FISH_GROWTH_FACTOR * fish.surface_area() * delta_time;
         }
 
         for i in 0..self.fishes.len() {
-            if self.fishes[i].energy > 90000.0 {
-                let new = self.fishes[i].split();
+            if self.fishes[i].energy > FISH_SPLIT_AT_SIZE {
+                let new = self.fishes[i].reproduce(&mut self.rng);
                 self.fishes.push(new);
             }
         }
@@ -146,6 +160,7 @@ pub struct Fish {
     y: f64,
     energy: Energy,
     program: Program,
+    color: [f32; 4],
 }
 
 fn behave_fishes(state: &mut State, delta_time: f64) {
@@ -163,6 +178,7 @@ impl Fish {
             y,
             energy,
             program,
+            color: GREEN,
         }
     }
 
@@ -210,8 +226,7 @@ impl Fish {
         self.y += direction.y;
     }
 
-    pub fn split(&mut self) -> Fish {
-        let mut rng = rand::thread_rng();
+    pub fn reproduce(&mut self, rng: &mut ChaCha20Rng) -> Fish {
         let ax = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
         let opposite = ax - std::f64::consts::PI;
 
@@ -222,20 +237,17 @@ impl Fish {
         let x_2 = self.x + radius * opposite.cos();
         let y_2 = self.y + radius * opposite.sin();
 
-        let child_energy = self.energy / 2.5;
+        // self.energy -= SPLIT_COST;
+        let child_energy = self.energy / 5.0;
         self.move_to(x_1, y_1);
-        self.energy = child_energy;
-        Fish::new(x_2, y_2, child_energy, self.program.clone())
+        self.energy -= child_energy * 2.0;
+        Fish::new(x_2, y_2, child_energy, self.program.mutate(rng))
     }
 }
 
 impl<'a> App<'a> {
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
-
-        const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-        const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-        const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
         let fishes = &self.state.fishes;
 
@@ -253,7 +265,7 @@ impl<'a> App<'a> {
                     color: RED,
                     radius: 0.1,
                 };
-                Ellipse::new(GREEN).border(cell_border).draw(
+                Ellipse::new(fish.color).border(cell_border).draw(
                     cell,
                     &Default::default(),
                     identity,
@@ -281,11 +293,10 @@ pub enum Action {
 }
 
 fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
-    let move_speed: f64 = 10.0;
     use Action::*;
     match action {
         Move(direction) => {
-            fish.move_by(&(direction * delta_time * move_speed));
+            fish.move_by(&(direction * delta_time * MOVE_SPEED));
             fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y))
         }
         Pass => (),
