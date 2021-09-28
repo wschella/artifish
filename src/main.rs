@@ -5,6 +5,7 @@ extern crate piston;
 extern crate rand;
 #[macro_use]
 extern crate random_branch;
+extern crate rand_distr;
 
 use decorum::NotNan;
 use glutin_window::GlutinWindow as Window;
@@ -15,16 +16,19 @@ use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
 use piston::window::WindowSettings;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use rand_distr::{Distribution, Poisson};
 
+mod fish;
 mod languages;
 mod vec2;
 
-use languages::lang::*;
+use fish::Fish;
 use languages::lang;
+use languages::lang::*;
 
 use vec2::Vec2;
 
-const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+// const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
@@ -34,6 +38,7 @@ const MAX_Y: f64 = 600.0;
 const MOVE_SPEED: f64 = 25.0;
 const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 4.0;
 const FISH_GROWTH_FACTOR: f64 = 1.0;
+const FISH_GENERATION_RATE: f64 = 2.0 / 1.0;
 
 fn main() {
     // Change this to OpenGL::V2_1 if not working.
@@ -85,21 +90,17 @@ pub struct State {
 
 impl State {
     fn new(seed: u64) -> Self {
-        let mut fishes = Vec::new();
         let mut rng = ChaCha20Rng::seed_from_u64(seed);
-        for _ in 0..100 {
-            let x = rng.gen_range(0.0..MAX_X);
-            let y = rng.gen_range(0.0..MAX_Y);
-            let radius = rng.gen_range(5.0..1000.0);
+        let mut fishes: Vec<Fish> = (0..100).map(|_| generate_fish(&mut rng)).collect();
 
-            // let program = run_towards_program();
-            let program = Program::random(&mut rng, 6);
-            let fish = Fish::new(x, y, NotNan::from_inner(radius), program);
-            fishes.push(fish);
-        }
-
-        let mut smartie = Fish::new(MAX_X / 2.0, MAX_Y / 2.0, NotNan::from_inner(500.0), lang::smartie());
-        smartie.color = RED;
+        let smartie = Fish {
+            x: MAX_X / 2.0,
+            y: MAX_Y / 2.0,
+            energy: NotNan::from_inner(500.0),
+            program: lang::smartie(),
+            color: RED,
+            is_man_made: true,
+        };
         fishes.push(smartie);
 
         Self { fishes, rng }
@@ -115,6 +116,13 @@ impl State {
                 let new = self.fishes[i].reproduce(&mut self.rng);
                 self.fishes.push(new);
             }
+        }
+
+        // TODO: Make static some time
+        let distr = Poisson::new(FISH_GENERATION_RATE * delta_time).unwrap();
+        let n_fishes: u32 = distr.sample(&mut self.rng).floor() as u32;
+        for _ in 0..n_fishes {
+            self.fishes.push(generate_fish(&mut self.rng))
         }
 
         // prevent aquarium leaks
@@ -152,18 +160,28 @@ impl State {
     }
 }
 
-pub type Energy = NotNan<f64>;
-
-#[derive(Clone)]
-pub struct Fish {
-    x: f64,
-    y: f64,
-    energy: Energy,
-    program: Program,
-    color: [f32; 4],
+fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
+    let x = rng.gen_range(0.0..MAX_X);
+    let y = rng.gen_range(0.0..MAX_Y);
+    let radius = rng.gen_range(5.0..1000.0);
+    let color: [f32; 4] = [
+        rng.gen_range(0.0..=1.0),
+        rng.gen_range(0.0..=1.0),
+        rng.gen_range(0.0..=1.0),
+        1.0,
+    ];
+    let program = Program::random(rng, 6);
+    Fish {
+        x,
+        y,
+        energy: NotNan::from_inner(radius),
+        program,
+        color,
+        is_man_made: false,
+    }
 }
 
-fn behave_fishes(state: &mut State, delta_time: f64) {
+fn behave_fishes(state: &mut State, delta_time: f64) -> () {
     let fishes = &mut state.fishes;
     for i in 0..fishes.len() {
         let action = run_fish(fishes, i);
@@ -171,78 +189,15 @@ fn behave_fishes(state: &mut State, delta_time: f64) {
     }
 }
 
-impl Fish {
-    pub fn new(x: f64, y: f64, energy: Energy, program: Program) -> Self {
-        Fish {
-            x,
-            y,
-            energy,
-            program,
-            color: GREEN,
-        }
-    }
+fn darken(color: &[f32; 4]) -> [f32; 4] {
+    let f = 0.5;
 
-    pub fn radius(&self) -> f64 {
-        (self.energy / std::f64::consts::PI).into_inner().cbrt()
-    }
-
-    pub fn surface_area(&self) -> f64 {
-        self.radius().powi(2) * std::f64::consts::PI
-    }
-
-    pub fn distance(&self, other: &Fish) -> f64 {
-        self.displacement_to(other).length()
-    }
-    // Verplaatsingsvector naar. Ha. Blub. Blub. I'm coming to get you.
-    pub fn displacement_to(&self, other: &Fish) -> Vec2 {
-        let dx = other.x - self.x;
-        let dy = other.y - self.y;
-        return Vec2::new(dx, dy);
-    }
-    pub fn direction_to(&self, other: &Fish) -> Vec2 {
-        let displacement_to = self.displacement_to(other);
-        // TODO: This is not what we really want, we should return an option or smth
-        if displacement_to.length() == 0.0 {
-            return Vec2::zero();
-        }
-        displacement_to / displacement_to.length()
-    }
-
-    pub fn covers(&self, other: &Fish) -> bool {
-        self.radius() > self.distance(other)
-    }
-
-    pub fn eat(&mut self, other: &Fish) {
-        self.energy += other.energy;
-    }
-
-    pub fn move_to(&mut self, x: f64, y: f64) {
-        self.x = x;
-        self.y = y;
-    }
-
-    pub fn move_by(&mut self, direction: &Vec2) {
-        self.x += direction.x;
-        self.y += direction.y;
-    }
-
-    pub fn reproduce(&mut self, rng: &mut ChaCha20Rng) -> Fish {
-        let ax = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
-        let opposite = ax - std::f64::consts::PI;
-
-        let radius = self.radius();
-
-        let x_1 = self.x + radius * ax.cos();
-        let y_1 = self.y + radius * ax.sin();
-        let x_2 = self.x + radius * opposite.cos();
-        let y_2 = self.y + radius * opposite.sin();
-
-        // self.energy -= SPLIT_COST;
-        let child_energy = self.energy / 5.0;
-        self.move_to(x_1, y_1);
-        self.energy -= child_energy * 2.0;
-        Fish::new(x_2, y_2, child_energy, self.program.mutate(rng))
-    }
+    [
+        color[0] * f,
+        color[1] * f,
+        color[2] * f,
+        1.0 - f * (1.0 - color[3]),
+    ]
 }
 
 impl<'a> App<'a> {
@@ -260,10 +215,11 @@ impl<'a> App<'a> {
             let identity = c.transform;
 
             for fish in fishes.iter().rev() {
+                let fish_color_dark = darken(&fish.color);
                 let cell = ellipse::circle(fish.x, fish.y, fish.radius());
                 let cell_border = Border {
-                    color: RED,
-                    radius: 0.1,
+                    color: fish_color_dark,
+                    radius: 1.0,
                 };
                 Ellipse::new(fish.color).border(cell_border).draw(
                     cell,
@@ -272,8 +228,8 @@ impl<'a> App<'a> {
                     gl,
                 );
 
-                let center = ellipse::circle(fish.x, fish.y, 2.0);
-                ellipse(RED, center, identity, gl);
+                let center = ellipse::circle(fish.x, fish.y, 1.5);
+                ellipse(fish_color_dark, center, identity, gl);
 
                 let t = identity.trans(100.0, 100.0);
                 text(RED, 100, "tetten", glyph_cache, t, gl).unwrap();
