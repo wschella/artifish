@@ -7,7 +7,7 @@ extern crate rand;
 extern crate random_branch;
 extern crate rand_distr;
 
-use decorum::NotNan;
+use decorum::{NotNan, Real};
 use glutin_window::GlutinWindow as Window;
 use graphics::ellipse::Border;
 use opengl_graphics::{Filter, GlGraphics, GlyphCache, OpenGL, TextureSettings};
@@ -18,12 +18,12 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rand_distr::{Distribution, Poisson};
 
+mod angels;
 mod fish;
 mod languages;
 mod vec2;
 
 use fish::Fish;
-use languages::lang;
 use languages::lang::*;
 
 use vec2::Vec2;
@@ -42,6 +42,7 @@ const MOVE_SPEED: f64 = 25.0;
 const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 4.0;
 const FISH_GROWTH_FACTOR: f64 = 1.0;
 const FISH_GENERATION_RATE: f64 = 2.0 / 1.0;
+const MOVE_COST: f64 = 1.0 / MOVE_SPEED / MOVE_SPEED;
 
 fn main() {
     // Change this to OpenGL::V2_1 if not working.
@@ -104,7 +105,7 @@ impl State {
                 x,
                 y,
                 energy: NotNan::from_inner(500.0),
-                program: lang::smartie(),
+                program: angels::smartie(),
                 color: RED,
                 is_man_made: true,
                 tag: Some("s".to_owned()),
@@ -146,8 +147,9 @@ impl State {
             }
         }
 
-        // Hard coded run-toward smaller and run away from bigger
         behave_fishes(self, delta_time);
+        // WHEN ANGELS DESERVE TO DIEEEEEEEEEEEEEEE
+        self.fishes.retain(|f| f.energy > 0.0);
 
         let fishes = &mut self.fishes;
         fishes.sort_by_key(|f| -f.energy);
@@ -274,8 +276,13 @@ fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
     use Action::*;
     match action {
         Move(direction) => {
-            fish.move_by(&(direction * delta_time * MOVE_SPEED));
-            fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y))
+            let displacement = direction * delta_time * MOVE_SPEED;
+            fish.move_by(&displacement);
+            fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y));
+            // neutral if: energy * distance.powi(2) * move_cost = surface_area * growth_factor
+            // with surface = energy.cuberoot().powi(2)
+            // -> neutral distance = sqrt(surface_area * growth_factor * 1/move_cost * 1/energy)
+            fish.energy -= fish.energy * displacement.length().powi(2) * MOVE_COST;
         }
         Pass => (),
     }

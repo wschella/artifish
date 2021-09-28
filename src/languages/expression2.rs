@@ -8,10 +8,11 @@ use std::cmp::Ord;
 // THE GREAT BEHAVIOURAL INTERPRETER
 #[derive(Clone)]
 pub struct Program {
-    root: BoxedExpr<Action>,
+    pub root: BoxedExpr<Action>,
 }
 
 impl Program {
+    #[allow(dead_code)]
     pub fn empty() -> Self {
         Program {
             root: Box::new(ConstExpr {
@@ -26,6 +27,7 @@ impl Program {
         }
     }
 
+    #[allow(dead_code)]
     pub fn size(&self) -> u64 {
         return self.root.size();
     }
@@ -82,42 +84,13 @@ macro_rules! generate_tree {
 
 }
 
-
-pub fn smartie() -> Program {
-    Program {
-        root: Box::new(MoveExpr {
-            direction: Box::new(IfExpr {
-                // if dichtste_vis.energy < self.energy
-                condition: Box::new(LessThenExpr {
-                    left: Box::new(FishEnergyExpr {
-                        fish: Box::new(DichtsteVisExpr),
-                    }),
-                    right: Box::new(FishEnergyExpr {
-                        fish: Box::new(GetSelfExpr),
-                    }),
-                }),
-                // then move towards
-                consequent: Box::new(FishDirectionExpr {
-                    origin: Box::new(GetSelfExpr),
-                    target: Box::new(DichtsteVisExpr),
-                }),
-                // else run away
-                alternative: Box::new(FishDirectionExpr {
-                    origin: Box::new(DichtsteVisExpr),
-                    target: Box::new(GetSelfExpr),
-                }),
-            }),
-        }),
-    }
-}
-
 pub fn run_fish(fishes: &Vec<Fish>, fish_num: usize) -> Action {
     let state = InterpreterState { fishes, fish_num };
     let action = fishes[fish_num].program.root.eval(&state);
     action
 }
 
-struct InterpreterState<'a> {
+pub struct InterpreterState<'a> {
     fish_num: usize,
     fishes: &'a Vec<Fish>,
 }
@@ -128,8 +101,8 @@ impl<'a> InterpreterState<'a> {
     }
 }
 
-type ExprRng = ChaCha20Rng;
-type BoxedExpr<T> = Box<dyn Expr<T>>;
+pub type ExprRng = ChaCha20Rng;
+pub type BoxedExpr<T> = Box<dyn Expr<T>>;
 
 const ACTION_MIN: usize = MOVE_MIN;
 fn generate_action_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Action> {
@@ -186,7 +159,7 @@ where
     Box::new(IfExpr {
         condition: generate_bool_expr(rng, max_depth - 1),
         consequent: generator(rng, max_depth - 1),
-        alternative: generator(rng, max_depth -1),
+        alternative: generator(rng, max_depth - 1),
     })
 }
 
@@ -248,19 +221,19 @@ fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng
     })
 }
 
-trait Mutable<T> {
+pub trait Mutable<T> {
     fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<T>;
 }
 
 /// Expression that evaluates to T
-trait Expr<T>: ExprClone<T> + Mutable<T> {
+pub trait Expr<T>: ExprClone<T> + Mutable<T> {
     fn eval(&self, s: &InterpreterState) -> T;
 
     fn size(&self) -> u64;
 }
 
 // https://stackoverflow.com/questions/30353462/how-to-clone-a-struct-storing-a-boxed-trait-object
-trait ExprClone<T> {
+pub trait ExprClone<T> {
     fn clone_box(&self) -> BoxedExpr<T>;
 }
 
@@ -282,7 +255,7 @@ impl<T> Clone for BoxedExpr<T> {
 }
 
 #[derive(Clone)]
-struct GetSelfExpr;
+pub struct GetSelfExpr;
 
 impl Expr<FishRef> for GetSelfExpr {
     fn eval(&self, state: &InterpreterState) -> FishRef {
@@ -305,11 +278,11 @@ impl Mutable<FishRef> for GetSelfExpr {
 }
 
 #[derive(Clone)]
-struct DichtsteVisExpr;
+pub struct DichtsteVisExpr;
 
 #[derive(Clone, Debug)]
-struct FishRef {
-    maybe_fish_num: Option<usize>,
+pub struct FishRef {
+    pub maybe_fish_num: Option<usize>,
 }
 
 impl Expr<FishRef> for DichtsteVisExpr {
@@ -335,14 +308,14 @@ impl Mutable<FishRef> for DichtsteVisExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
-            generate_fish_ref_expr(rng, FISH_REF_MIN),    
+            generate_fish_ref_expr(rng, FISH_REF_MIN),
         })
     }
 }
 
 #[derive(Clone)]
-struct FishEnergyExpr {
-    fish: Box<dyn Expr<FishRef>>,
+pub struct FishEnergyExpr {
+    pub fish: Box<dyn Expr<FishRef>>,
 }
 
 impl Expr<NotNan<f64>> for FishEnergyExpr {
@@ -370,9 +343,9 @@ impl Mutable<NotNan<f64>> for FishEnergyExpr {
 }
 
 #[derive(Clone)]
-struct FishDirectionExpr {
-    origin: Box<dyn Expr<FishRef>>,
-    target: Box<dyn Expr<FishRef>>,
+pub struct FishDirectionExpr {
+    pub origin: Box<dyn Expr<FishRef>>,
+    pub target: Box<dyn Expr<FishRef>>,
 }
 
 impl Expr<Vec2> for FishDirectionExpr {
@@ -404,8 +377,8 @@ impl Mutable<Vec2> for FishDirectionExpr {
 }
 
 #[derive(Clone)]
-struct ConstExpr<T> {
-    value: T,
+pub struct ConstExpr<T> {
+    pub value: T,
 }
 
 impl<T> ConstExpr<T> {
@@ -443,7 +416,6 @@ impl Mutable<Action> for ConstExpr<Action> {
             wrap_in_generic(self, rng),
             generate_action_expr(rng, ACTION_MIN),
         })
-
     }
 }
 
@@ -457,9 +429,9 @@ impl Mutable<bool> for ConstExpr<bool> {
 }
 
 #[derive(Clone)]
-struct LessThenExpr<T> {
-    left: BoxedExpr<T>,
-    right: BoxedExpr<T>,
+pub struct LessThenExpr<T> {
+    pub left: BoxedExpr<T>,
+    pub right: BoxedExpr<T>,
 }
 
 impl<T> Expr<bool> for LessThenExpr<T>
@@ -496,9 +468,9 @@ where
 }
 
 #[derive(Clone)]
-struct AddExpr<T> {
-    left: BoxedExpr<T>,
-    right: BoxedExpr<T>,
+pub struct AddExpr<T> {
+    pub left: BoxedExpr<T>,
+    pub right: BoxedExpr<T>,
 }
 
 impl<T> Expr<T> for AddExpr<T>
@@ -541,8 +513,8 @@ where
 }
 
 #[derive(Clone)]
-struct NotExpr<T> {
-    value: BoxedExpr<T>,
+pub struct NotExpr<T> {
+    pub value: BoxedExpr<T>,
 }
 
 impl<T> Expr<T> for NotExpr<T>
@@ -573,8 +545,8 @@ where
 }
 
 #[derive(Clone)]
-struct NegateExpr<T> {
-    value: BoxedExpr<T>,
+pub struct NegateExpr<T> {
+    pub value: BoxedExpr<T>,
 }
 
 impl<T> Expr<T> for NegateExpr<T>
@@ -605,10 +577,10 @@ where
 }
 
 #[derive(Clone)]
-struct IfExpr<T> {
-    condition: Box<dyn Expr<bool>>,
-    consequent: BoxedExpr<T>,
-    alternative: BoxedExpr<T>,
+pub struct IfExpr<T> {
+    pub condition: Box<dyn Expr<bool>>,
+    pub consequent: BoxedExpr<T>,
+    pub alternative: BoxedExpr<T>,
 }
 
 impl<T> Expr<T> for IfExpr<T>
@@ -656,8 +628,8 @@ where
 }
 
 #[derive(Clone)]
-struct MoveExpr {
-    direction: Box<dyn Expr<Vec2>>,
+pub struct MoveExpr {
+    pub direction: Box<dyn Expr<Vec2>>,
 }
 
 impl Expr<Action> for MoveExpr {
