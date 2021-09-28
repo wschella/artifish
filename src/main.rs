@@ -28,9 +28,12 @@ use languages::lang::*;
 
 use vec2::Vec2;
 
-// const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+#[allow(dead_code)]
+const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+#[allow(dead_code)]
+const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
@@ -93,15 +96,21 @@ impl State {
         let mut rng = ChaCha20Rng::seed_from_u64(seed);
         let mut fishes: Vec<Fish> = (0..100).map(|_| generate_fish(&mut rng)).collect();
 
-        let smartie = Fish {
-            x: MAX_X / 2.0,
-            y: MAX_Y / 2.0,
-            energy: NotNan::from_inner(500.0),
-            program: lang::smartie(),
-            color: RED,
-            is_man_made: true,
-        };
-        fishes.push(smartie);
+        for _ in 0..10 {
+            let x = rng.gen_range(0.0..MAX_X);
+            let y = rng.gen_range(0.0..MAX_Y);
+
+            let smartie = Fish {
+                x,
+                y,
+                energy: NotNan::from_inner(500.0),
+                program: lang::smartie(),
+                color: RED,
+                is_man_made: true,
+                tag: Some("s".to_owned()),
+            };
+            fishes.push(smartie);
+        }
 
         Self { fishes, rng }
     }
@@ -178,6 +187,7 @@ fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
         program,
         color,
         is_man_made: false,
+        tag: None,
     }
 }
 
@@ -230,6 +240,18 @@ impl<'a> App<'a> {
 
                 let center = ellipse::circle(fish.x, fish.y, 1.5);
                 ellipse(fish_color_dark, center, identity, gl);
+
+                if let Some(ref tag) = fish.tag {
+                    text(
+                        WHITE,
+                        20,
+                        tag,
+                        glyph_cache,
+                        identity.trans(fish.x, fish.y),
+                        gl,
+                    )
+                    .unwrap();
+                }
 
                 let t = identity.trans(100.0, 100.0);
                 text(RED, 100, "tetten", glyph_cache, t, gl).unwrap();

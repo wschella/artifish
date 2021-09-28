@@ -17,6 +17,7 @@ pub struct Fish {
     pub program: Program,
     pub color: [f32; 4],
     pub is_man_made: bool,
+    pub tag: Option<String>,
 }
 
 impl Fish {
@@ -92,6 +93,7 @@ impl Fish {
             program: child_program,
             color: self.color,
             is_man_made: self.is_man_made,
+            tag: self.tag.clone(),
         }
     }
 }
