@@ -40,11 +40,13 @@ const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
 
-const MOVE_SPEED: f64 = 25.0;
+const MOVE_SPEED: f64 = 100.0;
 const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 4.0;
 const FISH_GROWTH_FACTOR: f64 = 1.0;
 const FISH_GENERATION_RATE: f64 = 2.0 / 1.0;
-const MOVE_COST: f64 = 1.0 / MOVE_SPEED / MOVE_SPEED;
+
+// TODO: FIXME
+const IMPULSE_COST: f64 = 0.1; // / MOVE_SPEED / MOVE_SPEED;
 
 fn main() {
     // Change this to OpenGL::V2_1 if not working.
@@ -104,18 +106,11 @@ fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
         x,
         y,
         energy: NotNan::from_inner(radius),
+        velocity: Vec2::new(0.0, 0.0),
         program,
         color,
         is_man_made: false,
         tag: None,
-    }
-}
-
-fn behave_fishes(state: &mut State, delta_time: f64) -> () {
-    let fishes = &mut state.fishes;
-    for i in 0..fishes.len() {
-        let action = run_fish(fishes, i);
-        execute_fish_action(&mut fishes[i], action, delta_time);
     }
 }
 

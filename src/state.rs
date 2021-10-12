@@ -3,7 +3,8 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rand_distr::{Distribution, Poisson};
 
-use crate::{FISH_GENERATION_RATE, angels, generate_fish};
+use crate::vec2::Vec2;
+use crate::{FISH_GENERATION_RATE, MOVE_SPEED, angels, generate_fish};
 use crate::{FISH_GROWTH_FACTOR, FISH_SPLIT_AT_SIZE, MAX_X, MAX_Y, RED, fish::Fish, languages::lang::Program};
 use crate::fish::behave_fishes;
 
@@ -28,6 +29,7 @@ impl State {
                 x,
                 y,
                 energy: NotNan::from_inner(500.0),
+                velocity: Vec2::new(0.0, 0.0),
                 program: angels::smartie(),
                 color: RED,
                 is_man_made: true,
@@ -42,6 +44,14 @@ impl State {
     pub fn update(&mut self, delta_time: f64) {
         for fish in self.fishes.iter_mut() {
             fish.energy += FISH_GROWTH_FACTOR * fish.surface_area() * delta_time;
+        }
+
+        for fish in self.fishes.iter_mut() {
+            // TODO: Drag @wout
+
+            let displacement = fish.velocity * delta_time * MOVE_SPEED;
+            fish.move_by(&displacement);
+            fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y));
         }
 
         for i in 0..self.fishes.len() {

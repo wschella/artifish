@@ -4,7 +4,7 @@ use decorum::NotNan;
 use rand_chacha::ChaCha20Rng;
 use rand::Rng;
 
-use crate::{GREEN, MAX_X, MAX_Y, MOVE_COST, MOVE_SPEED, languages::lang::{Program, run_fish}, state::State, vec2::Vec2};
+use crate::{GREEN, MAX_X, MAX_Y, IMPULSE_COST, MOVE_SPEED, languages::lang::{Program, run_fish}, state::State, vec2::Vec2};
 
 use super::languages::lang::*;
 use super::vec2::*;
@@ -16,6 +16,7 @@ pub struct Fish {
     pub x: f64,
     pub y: f64,
     pub energy: Energy,
+    pub velocity: Vec2,
     pub program: Program,
     pub color: [f32; 4],
     pub is_man_made: bool,
@@ -37,6 +38,7 @@ impl Fish {
             y,
             energy,
             program,
+            velocity: Vec2::new(0.0, 0.0),
             color: GREEN,
             is_man_made: false,
             tag: None,
@@ -51,6 +53,10 @@ impl Fish {
 
     pub fn surface_area(&self) -> f64 {
         self.radius().powi(2) * std::f64::consts::PI
+    }
+
+    pub fn mass(&self) -> f64 {
+        self.energy.into_inner()
     }
 
     pub fn distance(&self, other: &Fish) -> f64 {
@@ -73,6 +79,11 @@ impl Fish {
 
     pub fn covers(&self, other: &Fish) -> bool {
         self.radius() > self.distance(other)
+    }
+
+    pub fn apply_impulse(&mut self, force: Vec2) {
+        let acceleration = force  / self.mass();
+        self.velocity += acceleration;
     }
 
     pub fn eat(&mut self, other: &Fish) {
@@ -115,6 +126,7 @@ impl Fish {
             x: x_2,
             y: y_2,
             energy: child_energy,
+            velocity: Vec2::new(0.0, 0.0),
             program: child_program,
             color: self.color,
             is_man_made: self.is_man_made,
@@ -131,17 +143,21 @@ pub enum Action {
     Move(Vec2),
 }
 
+const FORCE_MULTIPLIER: f64 = 1.0;
+
 pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
     use Action::*;
     match action {
-        Move(direction) => {
-            let displacement = direction * delta_time * MOVE_SPEED;
-            fish.move_by(&displacement);
-            fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y));
+        Move(force) => {
+            
+            // I hope this is impulse, I'm not a physicist
+            let impulse =  force * delta_time * FORCE_MULTIPLIER * fish.mass();
+            fish.apply_impulse(impulse);
+
             // neutral if: energy * distance.powi(2) * move_cost = surface_area * growth_factor
             // with surface = energy.cuberoot().powi(2)
             // -> neutral distance = sqrt(surface_area * growth_factor * 1/move_cost * 1/energy)
-            fish.energy -= fish.energy * displacement.length().powi(2) * MOVE_COST;
+            fish.energy -= impulse.length() * IMPULSE_COST; // we removed powi
         }
         Pass => (),
     }
