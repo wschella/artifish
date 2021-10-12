@@ -1,8 +1,10 @@
 // Blub
 
 use decorum::NotNan;
-use rand::Rng;
 use rand_chacha::ChaCha20Rng;
+use rand::Rng;
+
+use crate::{GREEN, MAX_X, MAX_Y, MOVE_COST, MOVE_SPEED, languages::lang::{Program, run_fish}, state::State, vec2::Vec2};
 
 use super::languages::lang::*;
 use super::vec2::*;
@@ -18,6 +20,28 @@ pub struct Fish {
     pub color: [f32; 4],
     pub is_man_made: bool,
     pub tag: Option<String>,
+}
+
+pub fn behave_fishes(state: &mut State, delta_time: f64) {
+    let fishes = &mut state.fishes;
+    for i in 0..fishes.len() {
+        let action = run_fish(fishes, i);
+        execute_fish_action(&mut fishes[i], action, delta_time);
+    }
+}
+
+impl Fish {
+    pub fn new(x: f64, y: f64, energy: Energy, program: Program) -> Self {
+        Fish {
+            x,
+            y,
+            energy,
+            program,
+            color: GREEN,
+            is_man_made: false,
+            tag: None,
+        }
+    }
 }
 
 impl Fish {
@@ -80,6 +104,7 @@ impl Fish {
         let child_energy = self.energy / 5.0;
         self.move_to(x_1, y_1);
         self.energy -= child_energy * 2.0;
+
         let child_program = if self.is_man_made {
             self.program.clone()
         } else {
@@ -95,5 +120,29 @@ impl Fish {
             is_man_made: self.is_man_made,
             tag: self.tag.clone(),
         }
+    }
+}
+
+
+
+#[derive(Copy, Clone, Debug)]
+pub enum Action {
+    Pass,
+    Move(Vec2),
+}
+
+pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
+    use Action::*;
+    match action {
+        Move(direction) => {
+            let displacement = direction * delta_time * MOVE_SPEED;
+            fish.move_by(&displacement);
+            fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y));
+            // neutral if: energy * distance.powi(2) * move_cost = surface_area * growth_factor
+            // with surface = energy.cuberoot().powi(2)
+            // -> neutral distance = sqrt(surface_area * growth_factor * 1/move_cost * 1/energy)
+            fish.energy -= fish.energy * displacement.length().powi(2) * MOVE_COST;
+        }
+        Pass => (),
     }
 }

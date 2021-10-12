@@ -1,5 +1,6 @@
 use decorum::NotNan;
 
+use crate::fish::{Action, Fish};
 use crate::vec2::*;
 use crate::*;
 

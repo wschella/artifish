@@ -14,7 +14,7 @@ use opengl_graphics::{Filter, GlGraphics, GlyphCache, OpenGL, TextureSettings};
 use piston::event_loop::{EventSettings, Events};
 use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
 use piston::window::WindowSettings;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_distr::{Distribution, Poisson};
 
@@ -22,11 +22,13 @@ mod angels;
 mod fish;
 mod languages;
 mod vec2;
+mod state;
 
-use fish::Fish;
+use fish::{Fish, execute_fish_action};
 use languages::lang::*;
 
 use vec2::Vec2;
+use state::State;
 
 #[allow(dead_code)]
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
@@ -86,90 +88,6 @@ pub struct App<'a> {
     glyph_cache: GlyphCache<'a>,
 }
 
-#[derive(Clone)]
-pub struct State {
-    fishes: Vec<Fish>,
-    rng: ChaCha20Rng,
-}
-
-impl State {
-    fn new(seed: u64) -> Self {
-        let mut rng = ChaCha20Rng::seed_from_u64(seed);
-        let mut fishes: Vec<Fish> = (0..100).map(|_| generate_fish(&mut rng)).collect();
-
-        for _ in 0..10 {
-            let x = rng.gen_range(0.0..MAX_X);
-            let y = rng.gen_range(0.0..MAX_Y);
-
-            let smartie = Fish {
-                x,
-                y,
-                energy: NotNan::from_inner(500.0),
-                program: angels::smartie(),
-                color: RED,
-                is_man_made: true,
-                tag: Some("s".to_owned()),
-            };
-            fishes.push(smartie);
-        }
-
-        Self { fishes, rng }
-    }
-
-    fn update(&mut self, delta_time: f64) {
-        for fish in self.fishes.iter_mut() {
-            fish.energy += FISH_GROWTH_FACTOR * fish.surface_area() * delta_time;
-        }
-
-        for i in 0..self.fishes.len() {
-            if self.fishes[i].energy > FISH_SPLIT_AT_SIZE {
-                let new = self.fishes[i].reproduce(&mut self.rng);
-                self.fishes.push(new);
-            }
-        }
-
-        // TODO: Make static some time
-        let distr = Poisson::new(FISH_GENERATION_RATE * delta_time).unwrap();
-        let n_fishes: u32 = distr.sample(&mut self.rng).floor() as u32;
-        for _ in 0..n_fishes {
-            self.fishes.push(generate_fish(&mut self.rng))
-        }
-
-        // prevent aquarium leaks
-        let mut i = 0;
-        while i < self.fishes.len() {
-            let fish = &self.fishes[i];
-
-            if fish.x > MAX_X || fish.y > MAX_Y || fish.x < 0.0 || fish.y < 0.0 {
-                self.fishes.remove(i);
-            } else {
-                i += 1;
-            }
-        }
-
-        behave_fishes(self, delta_time);
-        // WHEN ANGELS DESERVE TO DIEEEEEEEEEEEEEEE
-        self.fishes.retain(|f| f.energy > 0.0);
-
-        let fishes = &mut self.fishes;
-        fishes.sort_by_key(|f| -f.energy);
-
-        // Fishes eat other fishes
-        let mut i = 0;
-        while i < fishes.len() {
-            let mut j = i + 1;
-            while j < fishes.len() {
-                if fishes[i].covers(&fishes[j]) {
-                    let eaten = fishes.remove(j);
-                    fishes[i].eat(&eaten);
-                } else {
-                    j += 1;
-                }
-            }
-            i += 1;
-        }
-    }
-}
 
 fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
     let x = rng.gen_range(0.0..MAX_X);
@@ -261,29 +179,7 @@ impl<'a> App<'a> {
         });
     }
 
-    fn update(&mut self, args: &UpdateArgs) {
+    pub fn update(&mut self, args: &UpdateArgs) {
         self.state.update(args.dt);
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum Action {
-    Pass,
-    Move(Vec2),
-}
-
-fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
-    use Action::*;
-    match action {
-        Move(direction) => {
-            let displacement = direction * delta_time * MOVE_SPEED;
-            fish.move_by(&displacement);
-            fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y));
-            // neutral if: energy * distance.powi(2) * move_cost = surface_area * growth_factor
-            // with surface = energy.cuberoot().powi(2)
-            // -> neutral distance = sqrt(surface_area * growth_factor * 1/move_cost * 1/energy)
-            fish.energy -= fish.energy * displacement.length().powi(2) * MOVE_COST;
-        }
-        Pass => (),
     }
 }
