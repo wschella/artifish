@@ -119,7 +119,7 @@ impl Fish {
         let child_program = if self.is_man_made {
             self.program.clone()
         } else {
-            self.program.mutate(rng)
+            self.program.clone().mutate(rng)
         };
 
         Fish {

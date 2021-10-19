@@ -9,20 +9,19 @@ use std::cmp::Ord;
 // THE GREAT BEHAVIOURAL INTERPRETER
 #[derive(Clone)]
 pub struct Program {
-    pub root: BoxedExpr<Action>,
+    pub root: ExprSlot<Action>,
 }
 
 impl Program {
     #[allow(dead_code)]
     pub fn empty() -> Self {
+        let root: Box<dyn Expr<Action>> = Box::new(ConstExpr { value: Action::Pass });
         Program {
-            root: Box::new(ConstExpr {
-                value: Action::Pass,
-            }),
+            root: root.into(),
         }
     }
 
-    pub fn random(rng: &mut ExprRng, max_depth: usize) -> Self {
+    pub fn random(rng: &mut ExprRng, max_depth: u64) -> Self {
         Program {
             root: generate_action_expr(rng, max_depth),
         }
@@ -33,10 +32,15 @@ impl Program {
         return self.root.size();
     }
 
-    pub fn mutate(&mut self, rng: &mut ExprRng) -> Self {
-        Program {
-            root: self.root.mutate(rng),
-        }
+    pub fn mutate(self, rng: &mut ExprRng) -> Self {
+        todo!()
+        // let total_size = self.root.size();
+        // let index: u64 = rng.gen_range(0..total_size);
+        
+        // let path_to_node = find_node(&mut self.root, index);
+        // let node = get_node(&mut self.root, path_to_node);
+        // node.mutate_in_place(rng);
+
     }
 }
 
@@ -87,7 +91,7 @@ macro_rules! generate_tree {
 
 pub fn run_fish(fishes: &Vec<Fish>, fish_num: usize) -> Action {
     let state = InterpreterState { fishes, fish_num };
-    let action = fishes[fish_num].program.root.eval(&state);
+    let action = fishes[fish_num].program.root.inner.eval(&state);
     action
 }
 
@@ -105,123 +109,6 @@ impl<'a> InterpreterState<'a> {
 pub type ExprRng = ChaCha20Rng;
 pub type BoxedExpr<T> = Box<dyn Expr<T>>;
 
-const ACTION_MIN: usize = MOVE_MIN;
-fn generate_action_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Action> {
-    assert!(max_depth >= ACTION_MIN);
-    generate_tree!(max_depth - ACTION_MIN, rng, {
-        generate_move_expr(rng, max_depth),
-    }, {
-        generate_if_expr(generate_action_expr, rng, max_depth),
-    })
-}
-
-const MOVE_MIN: usize = DIRECTION_MIN + 1;
-fn generate_move_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Action> {
-    assert!(max_depth >= MOVE_MIN);
-    generate_tree!(max_depth - MOVE_MIN, rng, {
-        Box::new(MoveExpr {
-            direction: generate_direction_expr(rng, max_depth - 1),
-        }),
-    }, {
-        generate_if_expr(generate_move_expr, rng, max_depth)
-    })
-}
-
-// TODO: this is not what we want longterm
-const DIRECTION_MIN: usize = FISH_REF_MIN + 1;
-fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<Vec2> {
-    assert!(max_depth >= DIRECTION_MIN);
-    generate_tree!(max_depth - DIRECTION_MIN, rng, {
-        Box::new(FishDirectionExpr {
-            origin: generate_fish_ref_expr(rng, max_depth - 1),
-            target: generate_fish_ref_expr(rng, max_depth - 1),
-        }),
-     }, {
-        generate_if_expr(generate_direction_expr, rng, max_depth)
-    })
-}
-
-const FISH_REF_MIN: usize = 0;
-fn generate_fish_ref_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<FishRef> {
-    generate_tree!(max_depth, rng, {
-        Box::new(GetSelfExpr),
-        Box::new(DichtsteVisExpr),
-    }, {
-        generate_if_expr(generate_fish_ref_expr, rng, max_depth),
-    })
-}
-
-fn generate_if_expr<F, T>(generator: F, rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<T>
-where
-    T: Clone + 'static,
-    F: Fn(&mut ExprRng, usize) -> BoxedExpr<T>,
-{
-    assert!(max_depth >= 1);
-    Box::new(IfExpr {
-        condition: generate_bool_expr(rng, max_depth - 1),
-        consequent: generator(rng, max_depth - 1),
-        alternative: generator(rng, max_depth - 1),
-    })
-}
-
-// macro_rules! expr {
-//     ( Const( $value:expr )) => {
-//         Box::new(ConstExpr::new($value))
-//     };
-//     ( $expr:expr ) => {
-//         $expr
-//     }
-// }
-
-fn generate_bool_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<bool> {
-    generate_tree!(max_depth, rng,
-    0 => {
-        Box::new(ConstExpr::new(true)),
-        Box::new(ConstExpr::new(false))
-    }, 
-    1 => {
-        generate_if_expr(generate_bool_expr, rng, max_depth)
-    },
-    2 => {
-        Box::new(LessThenExpr {
-            left: generate_f64_expr(rng, max_depth - 1),
-            right: generate_f64_expr(rng, max_depth - 1)
-        }),
-    },)
-}
-
-const F64_MIN: usize = 1;
-fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: usize) -> BoxedExpr<NotNan<f64>> {
-    assert!(max_depth > 0);
-    generate_tree!(max_depth - F64_MIN, rng, {
-        // TODO: Generate random f64
-        Box::new(FishEnergyExpr {
-            fish: Box::new(GetSelfExpr),
-        }),
-        Box::new(FishEnergyExpr {
-            fish: Box::new(DichtsteVisExpr),
-        })
-    },
-    {
-        generate_if_expr(generate_f64_expr, rng, max_depth)
-    })
-}
-
-fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng) -> BoxedExpr<T> {
-    branch_using!(rng, {
-        Box::new(IfExpr {
-            condition: generate_bool_expr(rng, 1),
-            consequent: expr.clone_box(),
-            alternative: expr.mutate(rng),
-        }),
-        Box::new(IfExpr {
-            condition: generate_bool_expr(rng, 1),
-            consequent: expr.mutate(rng),
-            alternative: expr.clone_box(),
-        })
-    })
-}
-
 pub trait Mutable<T> {
     fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<T>;
 }
@@ -231,6 +118,15 @@ pub trait Expr<T>: ExprClone<T> + Mutable<T> {
     fn eval(&self, s: &InterpreterState) -> T;
 
     fn size(&self) -> u64;
+
+    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
+        todo!()
+    }
+
+    fn num_children(&self) -> u64 {
+        todo!()
+    }
+
 }
 
 // https://stackoverflow.com/questions/30353462/how-to-clone-a-struct-storing-a-boxed-trait-object
@@ -256,6 +152,217 @@ impl<T> Clone for BoxedExpr<T> {
 }
 
 #[derive(Clone)]
+pub struct ExprSlot<T> {
+    inner: BoxedExpr<T>,
+}
+
+impl<T> ExprSlot<T> {
+    fn new(expr: BoxedExpr<T>) -> Self {
+        ExprSlot {
+            inner: expr,
+        }
+    }
+
+    fn eval(&self, s: &InterpreterState) -> T {
+        self.inner.eval(s)
+    }
+
+    fn mutate(&self, rng: &mut ExprRng) -> ExprSlot<T> {
+        Self { inner: self.inner.mutate(rng) }
+    }
+
+    fn mutate_in_place(&mut self, rng: &mut ExprRng) {
+        self.inner = self.inner.mutate(rng)
+    }
+
+    fn size(&self) -> u64 {
+        self.inner.size()
+    }
+}
+
+impl<T> From<BoxedExpr<T>> for ExprSlot<T> {
+    fn from(expr: BoxedExpr<T>) -> Self {
+        ExprSlot::new(expr)
+    }
+}
+
+pub trait MutableExprSlot {
+    fn mutate_me(&mut self, rng: &mut ExprRng);
+
+    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot;
+    fn num_children(&self) -> u64;
+}
+
+impl<T> MutableExprSlot for ExprSlot<T> {
+    fn mutate_me(&mut self, rng: &mut ExprRng) {
+        self.inner.mutate(rng);
+    }
+
+    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
+        self.inner.get_nth_child_mut(n)
+    }
+
+    fn num_children(&self) -> u64 {
+        self.inner.num_children()
+    }
+}
+
+
+enum FindNodeResult {
+    NumVisited(u64),
+    FoundNode(Vec<u64>),
+}
+
+fn get_node<'a>(root: &'a mut dyn MutableExprSlot, reverse_path: Vec<u64>) -> &'a mut dyn MutableExprSlot {
+    let mut pos = root;
+
+    for &child_index in reverse_path.iter().rev() {
+        pos = pos.get_nth_child_mut(child_index);
+    }
+
+    return pos;
+}
+
+fn find_node<'a>(root: &'a mut dyn MutableExprSlot, index: u64) -> FindNodeResult {
+    use FindNodeResult::*;
+
+    if index == 0 {
+        return FoundNode(vec![]);
+    }
+    
+    let mut num_visited: u64 = 1; // we visited root
+
+    for i in 0..root.num_children() {
+        let child = root.get_nth_child_mut(i);
+        match find_node(child, index - num_visited) {
+            FoundNode(mut reverse_path) => {
+                reverse_path.push(i);
+                return FoundNode(reverse_path);
+            }
+            NumVisited(count) => num_visited += count,
+        }
+    }
+    NumVisited(num_visited)
+}
+
+const ACTION_MIN: u64 = MOVE_MIN;
+fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Action> {
+    assert!(max_depth >= ACTION_MIN);
+    generate_tree!(max_depth - ACTION_MIN, rng, {
+        generate_move_expr(rng, max_depth),
+    }, {
+        generate_if_expr(generate_action_expr, rng, max_depth),
+    })
+}
+
+const MOVE_MIN: u64 = DIRECTION_MIN + 1;
+fn generate_move_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Action> {
+    assert!(max_depth >= MOVE_MIN);
+    generate_tree!(max_depth - MOVE_MIN, rng, {
+        Box::new(MoveExpr {
+            direction: generate_direction_expr(rng, max_depth - 1),
+        }),
+    }, {
+        generate_if_expr(generate_move_expr, rng, max_depth)
+    })
+}
+
+// TODO: this is not what we want longterm
+const DIRECTION_MIN: u64 = FISH_REF_MIN + 1;
+fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Vec2> {
+    assert!(max_depth >= DIRECTION_MIN);
+    generate_tree!(max_depth - DIRECTION_MIN, rng, {
+        Box::new(FishDirectionExpr {
+            origin: generate_fish_ref_expr(rng, max_depth - 1),
+            target: generate_fish_ref_expr(rng, max_depth - 1),
+        }),
+     }, {
+        generate_if_expr(generate_direction_expr, rng, max_depth)
+    })
+}
+
+const FISH_REF_MIN: u64 = 0;
+fn generate_fish_ref_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<FishRef> {
+    generate_tree!(max_depth, rng, {
+        Box::new(GetSelfExpr),
+        Box::new(DichtsteVisExpr),
+    }, {
+        generate_if_expr(generate_fish_ref_expr, rng, max_depth),
+    })
+}
+
+fn generate_if_expr<F, T>(generator: F, rng: &mut ExprRng, max_depth: u64) -> ExprSlot<T>
+where
+    T: Clone + 'static,
+    F: Fn(&mut ExprRng, u64) -> BoxedExpr<T>,
+{
+    assert!(max_depth >= 1);
+    Box::new(IfExpr {
+        condition: generate_bool_expr(rng, max_depth - 1).into(),
+        consequent: generator(rng, max_depth - 1).into(),
+        alternative: generator(rng, max_depth - 1).into(),
+    })
+}
+
+// macro_rules! expr {
+//     ( Const( $value:expr )) => {
+//         Box::new(ConstExpr::new($value))
+//     };
+//     ( $expr:expr ) => {
+//         $expr
+//     }
+// }
+
+fn generate_bool_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<bool> {
+    generate_tree!(max_depth, rng,
+    0 => {
+        Box::new(ConstExpr::new(true)),
+        Box::new(ConstExpr::new(false))
+    }, 
+    1 => {
+        generate_if_expr(generate_bool_expr, rng, max_depth)
+    },
+    2 => {
+        Box::new(LessThenExpr {
+            left: generate_f64_expr(rng, max_depth - 1).into(),
+            right: generate_f64_expr(rng, max_depth - 1).into(),
+        }),
+    },)
+}
+
+const F64_MIN: u64 = 1;
+fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<NotNan<f64>> {
+    assert!(max_depth > 0);
+    generate_tree!(max_depth - F64_MIN, rng, {
+        // TODO: Generate random f64
+        Box::new(FishEnergyExpr {
+            fish: Box::new(GetSelfExpr),
+        }),
+        Box::new(FishEnergyExpr {
+            fish: Box::new(DichtsteVisExpr),
+        })
+    },
+    {
+        generate_if_expr(generate_f64_expr, rng, max_depth)
+    })
+}
+
+fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng) -> ExprSlot<T> {
+    branch_using!(rng, {
+        Box::new(IfExpr {
+            condition: generate_bool_expr(rng, 1).into(),
+            consequent: expr.clone_box().into(),
+            alternative: expr.mutate(rng).into(),
+        }),
+        Box::new(IfExpr {
+            condition: generate_bool_expr(rng, 1).into(),
+            consequent: expr.mutate(rng).into(),
+            alternative: expr.clone_box().into(),
+        })
+    })
+}
+
+#[derive(Clone)]
 pub struct GetSelfExpr;
 
 impl Expr<FishRef> for GetSelfExpr {
@@ -268,6 +375,7 @@ impl Expr<FishRef> for GetSelfExpr {
     fn size(&self) -> u64 {
         1
     }
+
 }
 impl Mutable<FishRef> for GetSelfExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
@@ -334,6 +442,7 @@ impl Expr<NotNan<f64>> for FishEnergyExpr {
         1 + self.fish.size()
     }
 }
+
 impl Mutable<NotNan<f64>> for FishEnergyExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
         branch_using!(rng, {
@@ -368,6 +477,7 @@ impl Expr<Vec2> for FishDirectionExpr {
         1 + self.origin.size() + self.target.size()
     }
 }
+
 impl Mutable<Vec2> for FishDirectionExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Vec2> {
         branch_using!(rng, {
@@ -431,8 +541,8 @@ impl Mutable<bool> for ConstExpr<bool> {
 
 #[derive(Clone)]
 pub struct LessThenExpr<T> {
-    pub left: BoxedExpr<T>,
-    pub right: BoxedExpr<T>,
+    pub left: ExprSlot<T>,
+    pub right: ExprSlot<T>,
 }
 
 impl<T> Expr<bool> for LessThenExpr<T>
@@ -470,8 +580,8 @@ where
 
 #[derive(Clone)]
 pub struct AddExpr<T> {
-    pub left: BoxedExpr<T>,
-    pub right: BoxedExpr<T>,
+    pub left: ExprSlot<T>,
+    pub right: ExprSlot<T>,
 }
 
 impl<T> Expr<T> for AddExpr<T>
@@ -515,7 +625,7 @@ where
 
 #[derive(Clone)]
 pub struct NotExpr<T> {
-    pub value: BoxedExpr<T>,
+    pub value: ExprSlot<T>,
 }
 
 impl<T> Expr<T> for NotExpr<T>
@@ -530,6 +640,7 @@ where
         1 + self.value.size()
     }
 }
+
 impl<T> Mutable<T> for NotExpr<T>
 where
     T: std::ops::Not<Output = T> + Clone + 'static,
@@ -547,7 +658,7 @@ where
 
 #[derive(Clone)]
 pub struct NegateExpr<T> {
-    pub value: BoxedExpr<T>,
+    pub value: ExprSlot<T>,
 }
 
 impl<T> Expr<T> for NegateExpr<T>
@@ -562,6 +673,7 @@ where
         1 + self.value.size()
     }
 }
+
 impl<T> Mutable<T> for NegateExpr<T>
 where
     T: std::ops::Neg<Output = T> + Clone + 'static,
@@ -579,9 +691,9 @@ where
 
 #[derive(Clone)]
 pub struct IfExpr<T> {
-    pub condition: Box<dyn Expr<bool>>,
-    pub consequent: BoxedExpr<T>,
-    pub alternative: BoxedExpr<T>,
+    pub condition: ExprSlot<bool>,
+    pub consequent: ExprSlot<T>,
+    pub alternative: ExprSlot<T>,
 }
 
 impl<T> Expr<T> for IfExpr<T>
@@ -599,7 +711,16 @@ where
     fn size(&self) -> u64 {
         1 + self.condition.size() + self.consequent.size() + self.alternative.size()
     }
+
+    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
+        match n {
+            0 => &mut self.condition,
+            1 => &mut self.consequent,
+            2 => &mut self.alternative,
+        }
+    }
 }
+
 impl<T> Mutable<T> for IfExpr<T>
 where
     T: Clone + 'static,
@@ -643,6 +764,7 @@ impl Expr<Action> for MoveExpr {
         1 + self.direction.size()
     }
 }
+
 impl Mutable<Action> for MoveExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Action> {
         branch_using!(rng, {
