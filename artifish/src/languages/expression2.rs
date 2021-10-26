@@ -27,6 +27,10 @@ impl Program {
         }
     }
 
+    pub fn run(&self, state: &InterpreterState) -> Action {
+        self.root.inner.eval(state)
+    }
+
     #[allow(dead_code)]
     pub fn size(&self) -> u64 {
         return self.root.size();
@@ -39,6 +43,17 @@ impl Program {
         let path_to_node = find_node(&mut self.root, index);
         let node = get_node(&mut self.root, path_to_node.as_found());
         node.mutate_expr(rng);
+    }
+}
+
+pub struct InterpreterState<'a> {
+    pub fish_num: usize,
+    pub fishes: &'a Vec<Fish>,
+}
+
+impl<'a> InterpreterState<'a> {
+    fn get_self(&self) -> &'a Fish {
+        &self.fishes[self.fish_num]
     }
 }
 
@@ -87,22 +102,7 @@ macro_rules! generate_tree {
 
 }
 
-pub fn run_fish(fishes: &Vec<Fish>, fish_num: usize) -> Action {
-    let state = InterpreterState { fishes, fish_num };
-    let action = fishes[fish_num].program.root.inner.eval(&state);
-    action
-}
-
-pub struct InterpreterState<'a> {
-    fish_num: usize,
-    fishes: &'a Vec<Fish>,
-}
-
-impl<'a> InterpreterState<'a> {
-    fn get_self(&self) -> &'a Fish {
-        &self.fishes[self.fish_num]
-    }
-}
+// -------------------------------------------------------------------------
 
 pub type ExprRng = ChaCha20Rng;
 pub type BoxedExpr<T> = Box<dyn Expr<T>>;
@@ -112,12 +112,18 @@ pub trait Mutable<T> {
 }
 
 /// Expression that evaluates to T
-pub trait Expr<T>: ExprClone<T> + Mutable<T> {
+pub trait Expr<T>: ExprClone<T> + Mutable<T> + ExprTreeNode {
     fn eval(&self, s: &InterpreterState) -> T;
 
-    fn size(&self) -> u64;
+    fn size(&self) -> u64 {
+        todo!()
+    }
+}
 
-    fn get_nth_child_mut(&mut self, _n: u64) -> &mut dyn MutableExprSlot {
+// This split of from the main Expr trait mainly because we generate impl for this one 
+// via derive proc-macros.
+pub trait ExprTreeNode {
+    fn borrow_nth_child_mut(&mut self, _n: u64) -> &mut dyn MutableExprSlot {
         todo!()
     }
 
@@ -187,7 +193,7 @@ impl<T> From<BoxedExpr<T>> for ExprSlot<T> {
 
 pub trait MutableExprSlot {
     fn mutate_expr(&mut self, rng: &mut ExprRng);
-    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot;
+    fn borrow_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot;
     fn num_children(&self) -> u64;
 }
 
@@ -196,8 +202,8 @@ impl<T> MutableExprSlot for ExprSlot<T> {
         self.inner = self.inner.mutate(rng)
     }
 
-    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
-        self.inner.get_nth_child_mut(n)
+    fn borrow_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
+        self.inner.borrow_nth_child_mut(n)
     }
 
     fn num_children(&self) -> u64 {
@@ -205,6 +211,7 @@ impl<T> MutableExprSlot for ExprSlot<T> {
     }
 }
 
+// -------------------------------------------------------------------------
 
 enum FindNodeResult {
     NumVisited(u64),
@@ -224,7 +231,7 @@ fn get_node<'a>(root: &'a mut dyn MutableExprSlot, reverse_path: Vec<u64>) -> &'
     let mut pos = root;
 
     for &child_index in reverse_path.iter().rev() {
-        pos = pos.get_nth_child_mut(child_index);
+        pos = pos.borrow_nth_child_mut(child_index);
     }
 
     return pos;
@@ -240,7 +247,7 @@ fn find_node<'a>(root: &'a mut dyn MutableExprSlot, index: u64) -> FindNodeResul
     let mut num_visited: u64 = 1; // we visited root
 
     for i in 0..root.num_children() {
-        let child = root.get_nth_child_mut(i);
+        let child = root.borrow_nth_child_mut(i);
         match find_node(child, index - num_visited) {
             FoundNode(mut reverse_path) => {
                 reverse_path.push(i);
@@ -251,6 +258,8 @@ fn find_node<'a>(root: &'a mut dyn MutableExprSlot, index: u64) -> FindNodeResul
     }
     NumVisited(num_visited)
 }
+
+// -------------------------------------------------------------------------
 
 const ACTION_MIN: u64 = MOVE_MIN;
 fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
@@ -267,7 +276,7 @@ fn generate_move_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action
     assert!(max_depth >= MOVE_MIN);
     generate_tree!(max_depth - MOVE_MIN, rng, {
         Box::new(MoveExpr {
-            direction: generate_direction_expr(rng, max_depth - 1),
+            direction: ExprSlot::new(generate_direction_expr(rng, max_depth - 1)),
         }),
     }, {
         generate_if_expr(generate_move_expr, rng, max_depth)
@@ -280,8 +289,8 @@ fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<V
     assert!(max_depth >= DIRECTION_MIN);
     generate_tree!(max_depth - DIRECTION_MIN, rng, {
         Box::new(FishDirectionExpr {
-            origin: generate_fish_ref_expr(rng, max_depth - 1),
-            target: generate_fish_ref_expr(rng, max_depth - 1),
+            origin: ExprSlot::new(generate_fish_ref_expr(rng, max_depth - 1)),
+            target: ExprSlot::new(generate_fish_ref_expr(rng, max_depth - 1)),
         }),
      }, {
         generate_if_expr(generate_direction_expr, rng, max_depth)
@@ -343,10 +352,10 @@ fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<NotNan<
     generate_tree!(max_depth - F64_MIN, rng, {
         // TODO: Generate random f64
         Box::new(FishEnergyExpr {
-            fish: Box::new(GetSelfExpr),
+            fish: ExprSlot::new(Box::new(GetSelfExpr)),
         }),
         Box::new(FishEnergyExpr {
-            fish: Box::new(DichtsteVisExpr),
+            fish: ExprSlot::new(Box::new(DichtsteVisExpr)),
         })
     },
     {
@@ -369,7 +378,9 @@ fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng
     })
 }
 
-#[derive(Clone)]
+// -------------------------------------------------------------------------
+
+#[derive(Clone, ArtifishExpr)]
 pub struct GetSelfExpr;
 
 impl Expr<FishRef> for GetSelfExpr {
@@ -378,12 +389,8 @@ impl Expr<FishRef> for GetSelfExpr {
             maybe_fish_num: Some(state.fish_num),
         }
     }
-
-    fn size(&self) -> u64 {
-        1
-    }
-
 }
+
 impl Mutable<FishRef> for GetSelfExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<FishRef> {
         branch_using!(rng, {
@@ -393,7 +400,7 @@ impl Mutable<FishRef> for GetSelfExpr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct DichtsteVisExpr;
 
 #[derive(Clone, Debug)]
@@ -414,10 +421,6 @@ impl Expr<FishRef> for DichtsteVisExpr {
             maybe_fish_num: maybe_j,
         }
     }
-
-    fn size(&self) -> u64 {
-        1
-    }
 }
 
 impl Mutable<FishRef> for DichtsteVisExpr {
@@ -429,9 +432,9 @@ impl Mutable<FishRef> for DichtsteVisExpr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct FishEnergyExpr {
-    pub fish: Box<dyn Expr<FishRef>>,
+    pub fish: ExprSlot<FishRef>,
 }
 
 impl Expr<NotNan<f64>> for FishEnergyExpr {
@@ -444,10 +447,6 @@ impl Expr<NotNan<f64>> for FishEnergyExpr {
             NotNan::from(0.0)
         }
     }
-
-    fn size(&self) -> u64 {
-        1 + self.fish.size()
-    }
 }
 
 impl Mutable<NotNan<f64>> for FishEnergyExpr {
@@ -459,10 +458,10 @@ impl Mutable<NotNan<f64>> for FishEnergyExpr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct FishDirectionExpr {
-    pub origin: Box<dyn Expr<FishRef>>,
-    pub target: Box<dyn Expr<FishRef>>,
+    pub origin: ExprSlot<FishRef>,
+    pub target: ExprSlot<FishRef>
 }
 
 impl Expr<Vec2> for FishDirectionExpr {
@@ -479,10 +478,6 @@ impl Expr<Vec2> for FishDirectionExpr {
             _ => Vec2::zero(),
         }
     }
-
-    fn size(&self) -> u64 {
-        1 + self.origin.size() + self.target.size()
-    }
 }
 
 impl Mutable<Vec2> for FishDirectionExpr {
@@ -494,8 +489,9 @@ impl Mutable<Vec2> for FishDirectionExpr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct ConstExpr<T> {
+    #[expr_tree_node(not_a_child)]
     pub value: T,
 }
 
@@ -512,10 +508,6 @@ where
 {
     fn eval(&self, _: &InterpreterState) -> T {
         return self.value.clone();
-    }
-
-    fn size(&self) -> u64 {
-        1
     }
 }
 
@@ -546,7 +538,7 @@ impl Mutable<bool> for ConstExpr<bool> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct LessThenExpr<T> {
     pub left: ExprSlot<T>,
     pub right: ExprSlot<T>,
@@ -558,10 +550,6 @@ where
 {
     fn eval(&self, state: &InterpreterState) -> bool {
         self.left.eval(state) < self.right.eval(state)
-    }
-
-    fn size(&self) -> u64 {
-        1 + self.left.size() + self.right.size()
     }
 }
 
@@ -585,7 +573,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct AddExpr<T> {
     pub left: ExprSlot<T>,
     pub right: ExprSlot<T>,
@@ -598,16 +586,7 @@ where
     fn eval(&self, state: &InterpreterState) -> T {
         return self.left.eval(state) + self.right.eval(state);
     }
-
-    fn size(&self) -> u64 {
-        1 + self.left.size() + self.right.size()
-    }
 }
-// impl Mutable<NotNan<f64>> for AddExpr<NotNan<f64>> {
-//     fn mutate(&self, rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
-//         todo!()
-//     }
-// }
 
 impl<T> Mutable<T> for AddExpr<T>
 where
@@ -630,7 +609,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct NotExpr<T> {
     pub value: ExprSlot<T>,
 }
@@ -641,10 +620,6 @@ where
 {
     fn eval(&self, state: &InterpreterState) -> T {
         return !self.value.eval(state);
-    }
-
-    fn size(&self) -> u64 {
-        1 + self.value.size()
     }
 }
 
@@ -663,7 +638,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct NegateExpr<T> {
     pub value: ExprSlot<T>,
 }
@@ -674,10 +649,6 @@ where
 {
     fn eval(&self, state: &InterpreterState) -> T {
         return -self.value.eval(state);
-    }
-
-    fn size(&self) -> u64 {
-        1 + self.value.size()
     }
 }
 
@@ -696,7 +667,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct IfExpr<T> {
     pub condition: ExprSlot<bool>,
     pub consequent: ExprSlot<T>,
@@ -712,19 +683,6 @@ where
             self.consequent.eval(state)
         } else {
             self.alternative.eval(state)
-        }
-    }
-
-    fn size(&self) -> u64 {
-        1 + self.condition.size() + self.consequent.size() + self.alternative.size()
-    }
-
-    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
-        match n {
-            0 => &mut self.condition,
-            1 => &mut self.consequent,
-            2 => &mut self.alternative,
-            _ => panic!("child index out of range"),
         }
     }
 }
@@ -757,19 +715,15 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, ArtifishExpr)]
 pub struct MoveExpr {
-    pub direction: Box<dyn Expr<Vec2>>,
+    pub direction: ExprSlot<Vec2>,
 }
 
 impl Expr<Action> for MoveExpr {
     fn eval(&self, state: &InterpreterState) -> Action {
         let dir_vec = self.direction.eval(state);
         Action::Move(dir_vec)
-    }
-
-    fn size(&self) -> u64 {
-        1 + self.direction.size()
     }
 }
 

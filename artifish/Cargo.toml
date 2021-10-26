@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+artifish_derive = { path = "../artifish_derive" }
 piston                   = "0.53.0"
 piston2d-graphics        = "0.40.0"
 pistoncore-glutin_window = "0.69.0"

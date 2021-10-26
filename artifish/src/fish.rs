@@ -4,7 +4,7 @@ use decorum::NotNan;
 use rand_chacha::ChaCha20Rng;
 use rand::Rng;
 
-use crate::{GREEN, IMPULSE_COST, languages::lang::{Program, run_fish}, state::State, vec2::Vec2};
+use crate::{GREEN, IMPULSE_COST, languages::lang::{Program, InterpreterState}, state::State, vec2::Vec2};
 
 pub type Energy = NotNan<f64>;
 
@@ -23,7 +23,8 @@ pub struct Fish {
 pub fn behave_fishes(state: &mut State, delta_time: f64) {
     let fishes = &mut state.fishes;
     for i in 0..fishes.len() {
-        let action = run_fish(fishes, i);
+        let state = InterpreterState { fishes, fish_num: i };
+        let action = fishes[i].program.run(&state);
         execute_fish_action(&mut fishes[i], action, delta_time);
     }
 }

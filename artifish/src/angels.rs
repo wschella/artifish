@@ -1,8 +1,9 @@
 use super::languages::lang::*;
 
 pub fn smartie() -> Program {
-    Program {
-        root: todo!()
+    Program::empty()
+    // Program {
+        // root: todo!()
         // root: Box::new(MoveExpr {
         //     direction: Box::new(IfExpr {
         //         // if dichtste_vis.energy < self.energy
@@ -26,7 +27,7 @@ pub fn smartie() -> Program {
         //         }),
         //     }),
         // }).into(),
-    }
+    // }
 }
 
 // weten waar de rand is

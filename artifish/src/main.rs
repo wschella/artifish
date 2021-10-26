@@ -6,6 +6,8 @@ extern crate rand;
 #[macro_use]
 extern crate random_branch;
 extern crate rand_distr;
+#[macro_use]
+extern crate artifish_derive;
 
 use decorum::{NotNan};
 use glutin_window::GlutinWindow as Window;
