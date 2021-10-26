@@ -4,10 +4,7 @@ use decorum::NotNan;
 use rand_chacha::ChaCha20Rng;
 use rand::Rng;
 
-use crate::{GREEN, MAX_X, MAX_Y, IMPULSE_COST, MOVE_SPEED, languages::lang::{Program, run_fish}, state::State, vec2::Vec2};
-
-use super::languages::lang::*;
-use super::vec2::*;
+use crate::{GREEN, IMPULSE_COST, languages::lang::{Program, run_fish}, state::State, vec2::Vec2};
 
 pub type Energy = NotNan<f64>;
 
@@ -31,7 +28,9 @@ pub fn behave_fishes(state: &mut State, delta_time: f64) {
     }
 }
 
+
 impl Fish {
+    #[allow(dead_code)]
     pub fn new(x: f64, y: f64, energy: Energy, program: Program) -> Self {
         Fish {
             x,
@@ -116,10 +115,11 @@ impl Fish {
         self.move_to(x_1, y_1);
         self.energy -= child_energy * 2.0;
 
-        let child_program = if self.is_man_made {
-            self.program.clone()
-        } else {
-            self.program.clone().mutate(rng)
+
+
+        let mut child_program = self.program.clone();
+        if !self.is_man_made {
+            child_program.mutate(rng);
         };
 
         Fish {

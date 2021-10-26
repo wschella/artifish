@@ -23,7 +23,7 @@ impl Program {
 
     pub fn random(rng: &mut ExprRng, max_depth: u64) -> Self {
         Program {
-            root: generate_action_expr(rng, max_depth),
+            root: ExprSlot { inner: generate_action_expr(rng, max_depth)},
         }
     }
 
@@ -32,15 +32,13 @@ impl Program {
         return self.root.size();
     }
 
-    pub fn mutate(self, rng: &mut ExprRng) -> Self {
-        todo!()
-        // let total_size = self.root.size();
-        // let index: u64 = rng.gen_range(0..total_size);
+    pub fn mutate(&mut self, rng: &mut ExprRng) {
+        let total_size = self.root.size();
+        let index: u64 = rng.gen_range(0..total_size);
         
-        // let path_to_node = find_node(&mut self.root, index);
-        // let node = get_node(&mut self.root, path_to_node);
-        // node.mutate_in_place(rng);
-
+        let path_to_node = find_node(&mut self.root, index);
+        let node = get_node(&mut self.root, path_to_node.as_found());
+        node.mutate_expr(rng);
     }
 }
 
@@ -119,7 +117,7 @@ pub trait Expr<T>: ExprClone<T> + Mutable<T> {
 
     fn size(&self) -> u64;
 
-    fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
+    fn get_nth_child_mut(&mut self, _n: u64) -> &mut dyn MutableExprSlot {
         todo!()
     }
 
@@ -151,9 +149,14 @@ impl<T> Clone for BoxedExpr<T> {
     }
 }
 
-#[derive(Clone)]
 pub struct ExprSlot<T> {
     inner: BoxedExpr<T>,
+}
+
+impl<T> Clone for ExprSlot<T> {
+    fn clone(&self) -> ExprSlot<T> {
+        ExprSlot { inner: self.inner.clone_box() }
+    }
 }
 
 impl<T> ExprSlot<T> {
@@ -171,10 +174,6 @@ impl<T> ExprSlot<T> {
         Self { inner: self.inner.mutate(rng) }
     }
 
-    fn mutate_in_place(&mut self, rng: &mut ExprRng) {
-        self.inner = self.inner.mutate(rng)
-    }
-
     fn size(&self) -> u64 {
         self.inner.size()
     }
@@ -187,15 +186,14 @@ impl<T> From<BoxedExpr<T>> for ExprSlot<T> {
 }
 
 pub trait MutableExprSlot {
-    fn mutate_me(&mut self, rng: &mut ExprRng);
-
+    fn mutate_expr(&mut self, rng: &mut ExprRng);
     fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot;
     fn num_children(&self) -> u64;
 }
 
 impl<T> MutableExprSlot for ExprSlot<T> {
-    fn mutate_me(&mut self, rng: &mut ExprRng) {
-        self.inner.mutate(rng);
+    fn mutate_expr(&mut self, rng: &mut ExprRng) {
+        self.inner = self.inner.mutate(rng)
     }
 
     fn get_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
@@ -211,6 +209,15 @@ impl<T> MutableExprSlot for ExprSlot<T> {
 enum FindNodeResult {
     NumVisited(u64),
     FoundNode(Vec<u64>),
+}
+
+impl FindNodeResult {
+    fn as_found(self) -> Vec<u64> {
+        match self {
+            FindNodeResult::NumVisited(_) => panic!("node not found"),
+            FindNodeResult::FoundNode(path) => path,
+        }
+    }
 }
 
 fn get_node<'a>(root: &'a mut dyn MutableExprSlot, reverse_path: Vec<u64>) -> &'a mut dyn MutableExprSlot {
@@ -246,7 +253,7 @@ fn find_node<'a>(root: &'a mut dyn MutableExprSlot, index: u64) -> FindNodeResul
 }
 
 const ACTION_MIN: u64 = MOVE_MIN;
-fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Action> {
+fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
     assert!(max_depth >= ACTION_MIN);
     generate_tree!(max_depth - ACTION_MIN, rng, {
         generate_move_expr(rng, max_depth),
@@ -256,7 +263,7 @@ fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Actio
 }
 
 const MOVE_MIN: u64 = DIRECTION_MIN + 1;
-fn generate_move_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Action> {
+fn generate_move_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
     assert!(max_depth >= MOVE_MIN);
     generate_tree!(max_depth - MOVE_MIN, rng, {
         Box::new(MoveExpr {
@@ -269,7 +276,7 @@ fn generate_move_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Action>
 
 // TODO: this is not what we want longterm
 const DIRECTION_MIN: u64 = FISH_REF_MIN + 1;
-fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Vec2> {
+fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Vec2> {
     assert!(max_depth >= DIRECTION_MIN);
     generate_tree!(max_depth - DIRECTION_MIN, rng, {
         Box::new(FishDirectionExpr {
@@ -282,7 +289,7 @@ fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Ve
 }
 
 const FISH_REF_MIN: u64 = 0;
-fn generate_fish_ref_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<FishRef> {
+fn generate_fish_ref_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<FishRef> {
     generate_tree!(max_depth, rng, {
         Box::new(GetSelfExpr),
         Box::new(DichtsteVisExpr),
@@ -291,7 +298,7 @@ fn generate_fish_ref_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<Fis
     })
 }
 
-fn generate_if_expr<F, T>(generator: F, rng: &mut ExprRng, max_depth: u64) -> ExprSlot<T>
+fn generate_if_expr<F, T>(generator: F, rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<T>
 where
     T: Clone + 'static,
     F: Fn(&mut ExprRng, u64) -> BoxedExpr<T>,
@@ -313,7 +320,7 @@ where
 //     }
 // }
 
-fn generate_bool_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<bool> {
+fn generate_bool_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<bool> {
     generate_tree!(max_depth, rng,
     0 => {
         Box::new(ConstExpr::new(true)),
@@ -331,7 +338,7 @@ fn generate_bool_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<bool> {
 }
 
 const F64_MIN: u64 = 1;
-fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<NotNan<f64>> {
+fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<NotNan<f64>> {
     assert!(max_depth > 0);
     generate_tree!(max_depth - F64_MIN, rng, {
         // TODO: Generate random f64
@@ -347,7 +354,7 @@ fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: u64) -> ExprSlot<NotNan<f
     })
 }
 
-fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng) -> ExprSlot<T> {
+fn wrap_in_generic<T: Clone + 'static>(expr: &dyn Expr<T>, mut rng: &mut ExprRng) -> BoxedExpr<T> {
     branch_using!(rng, {
         Box::new(IfExpr {
             condition: generate_bool_expr(rng, 1).into(),
@@ -609,11 +616,11 @@ where
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
             wrap_in_generic::<T>(self, rng),
-            self.left.clone(),
-            self.right.clone(),
+            self.left.inner.clone(),
+            self.right.inner.clone(),
             Box::new(AddExpr {
                 left: self.left.clone(),
-                right: self.mutate(rng),
+                right: ExprSlot::new(self.mutate(rng)),
             }),
             Box::new(AddExpr {
                 left: self.left.mutate(rng),
@@ -648,7 +655,7 @@ where
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
             wrap_in_generic::<T>(self, rng),
-            self.value.clone(),
+            self.value.inner.clone(),
             Box::new(NotExpr {
                 value: self.value.mutate(rng),
             })
@@ -681,7 +688,7 @@ where
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
             wrap_in_generic::<T>(self, rng),
-            self.value.clone(),
+            self.value.inner.clone(),
             Box::new(NegateExpr {
                 value: self.value.mutate(rng),
             })
@@ -717,6 +724,7 @@ where
             0 => &mut self.condition,
             1 => &mut self.consequent,
             2 => &mut self.alternative,
+            _ => panic!("child index out of range"),
         }
     }
 }
@@ -728,8 +736,8 @@ where
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
         branch_using!(rng, {
             wrap_in_generic::<T>(self, rng),
-            self.consequent.clone(),
-            self.alternative.clone(),
+            self.consequent.inner.clone(),
+            self.alternative.inner.clone(),
             Box::new(IfExpr {
                 condition: self.condition.mutate(rng),
                 consequent: self.consequent.clone(),

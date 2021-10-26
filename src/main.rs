@@ -7,7 +7,7 @@ extern crate rand;
 extern crate random_branch;
 extern crate rand_distr;
 
-use decorum::{NotNan, Real};
+use decorum::{NotNan};
 use glutin_window::GlutinWindow as Window;
 use graphics::ellipse::Border;
 use opengl_graphics::{Filter, GlGraphics, GlyphCache, OpenGL, TextureSettings};
@@ -16,7 +16,6 @@ use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
 use piston::window::WindowSettings;
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
-use rand_distr::{Distribution, Poisson};
 
 mod angels;
 mod fish;
@@ -24,7 +23,7 @@ mod languages;
 mod vec2;
 mod state;
 
-use fish::{Fish, execute_fish_action};
+use fish::{Fish};
 use languages::lang::*;
 
 use vec2::Vec2;

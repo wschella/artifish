@@ -5,10 +5,8 @@ use rand_distr::{Distribution, Poisson};
 
 use crate::vec2::Vec2;
 use crate::{FISH_GENERATION_RATE, MOVE_SPEED, angels, generate_fish};
-use crate::{FISH_GROWTH_FACTOR, FISH_SPLIT_AT_SIZE, MAX_X, MAX_Y, RED, fish::Fish, languages::lang::Program};
+use crate::{FISH_GROWTH_FACTOR, FISH_SPLIT_AT_SIZE, MAX_X, MAX_Y, RED, fish::Fish};
 use crate::fish::behave_fishes;
-
-use crate::languages::lang;
 
 #[derive(Clone)]
 pub struct State {
