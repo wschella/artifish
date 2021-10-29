@@ -52,6 +52,7 @@ dependencies = [
 name = "artifish"
 version = "0.1.0"
 dependencies = [
+ "artifish_derive",
  "decorum",
  "piston",
  "piston2d-graphics",
@@ -61,6 +62,15 @@ dependencies = [
  "rand_chacha",
  "rand_distr",
  "random-branch",
+]
+
+[[package]]
+name = "artifish_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

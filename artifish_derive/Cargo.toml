@@ -1,0 +1,13 @@
+[package]
+name    = "artifish_derive"
+version = "0.1.0"
+authors = ["Wout Schellaert <wout@schellaert.org>", "Ilion Beyst <ilion@bey.st>"]
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "1.0.70"
+quote = "1.0.9"
+proc-macro2 = "1.0"
