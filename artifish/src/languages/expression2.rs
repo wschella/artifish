@@ -15,15 +15,17 @@ pub struct Program {
 impl Program {
     #[allow(dead_code)]
     pub fn empty() -> Self {
-        let root: Box<dyn Expr<Action>> = Box::new(ConstExpr { value: Action::Pass });
-        Program {
-            root: root.into(),
-        }
+        let root: Box<dyn Expr<Action>> = Box::new(ConstExpr {
+            value: Action::Pass,
+        });
+        Program { root: root.into() }
     }
 
     pub fn random(rng: &mut ExprRng, max_depth: u64) -> Self {
         Program {
-            root: ExprSlot { inner: generate_action_expr(rng, max_depth)},
+            root: ExprSlot {
+                inner: generate_action_expr(rng, max_depth),
+            },
         }
     }
 
@@ -39,7 +41,7 @@ impl Program {
     pub fn mutate(&mut self, rng: &mut ExprRng) {
         let total_size = self.root.size();
         let index: u64 = rng.gen_range(0..total_size);
-        
+
         let path_to_node = find_node(&mut self.root, index);
         let node = get_node(&mut self.root, path_to_node.as_found());
         node.mutate_expr(rng);
@@ -120,7 +122,7 @@ pub trait Expr<T>: ExprClone<T> + Mutable<T> + ExprTreeNode {
     }
 }
 
-// This split of from the main Expr trait mainly because we generate impl for this one 
+// This split of from the main Expr trait mainly because we generate impl for this one
 // via derive proc-macros.
 pub trait ExprTreeNode {
     fn borrow_nth_child_mut(&mut self, _n: u64) -> &mut dyn MutableExprSlot {
@@ -130,7 +132,6 @@ pub trait ExprTreeNode {
     fn num_children(&self) -> u64 {
         todo!()
     }
-
 }
 
 // https://stackoverflow.com/questions/30353462/how-to-clone-a-struct-storing-a-boxed-trait-object
@@ -161,15 +162,15 @@ pub struct ExprSlot<T> {
 
 impl<T> Clone for ExprSlot<T> {
     fn clone(&self) -> ExprSlot<T> {
-        ExprSlot { inner: self.inner.clone_box() }
+        ExprSlot {
+            inner: self.inner.clone_box(),
+        }
     }
 }
 
 impl<T> ExprSlot<T> {
     fn new(expr: BoxedExpr<T>) -> Self {
-        ExprSlot {
-            inner: expr,
-        }
+        ExprSlot { inner: expr }
     }
 
     fn eval(&self, s: &InterpreterState) -> T {
@@ -177,7 +178,9 @@ impl<T> ExprSlot<T> {
     }
 
     fn mutate(&self, rng: &mut ExprRng) -> ExprSlot<T> {
-        Self { inner: self.inner.mutate(rng) }
+        Self {
+            inner: self.inner.mutate(rng),
+        }
     }
 
     fn size(&self) -> u64 {
@@ -227,7 +230,10 @@ impl FindNodeResult {
     }
 }
 
-fn get_node<'a>(root: &'a mut dyn MutableExprSlot, reverse_path: Vec<u64>) -> &'a mut dyn MutableExprSlot {
+fn get_node<'a>(
+    root: &'a mut dyn MutableExprSlot,
+    reverse_path: Vec<u64>,
+) -> &'a mut dyn MutableExprSlot {
     let mut pos = root;
 
     for &child_index in reverse_path.iter().rev() {
@@ -243,7 +249,7 @@ fn find_node<'a>(root: &'a mut dyn MutableExprSlot, index: u64) -> FindNodeResul
     if index == 0 {
         return FoundNode(vec![]);
     }
-    
+
     let mut num_visited: u64 = 1; // we visited root
 
     for i in 0..root.num_children() {
@@ -461,7 +467,7 @@ impl Mutable<NotNan<f64>> for FishEnergyExpr {
 #[derive(Clone, ArtifishExpr)]
 pub struct FishDirectionExpr {
     pub origin: ExprSlot<FishRef>,
-    pub target: ExprSlot<FishRef>
+    pub target: ExprSlot<FishRef>,
 }
 
 impl Expr<Vec2> for FishDirectionExpr {

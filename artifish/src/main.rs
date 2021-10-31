@@ -9,7 +9,7 @@ extern crate rand_distr;
 #[macro_use]
 extern crate artifish_derive;
 
-use decorum::{NotNan};
+use decorum::NotNan;
 use glutin_window::GlutinWindow as Window;
 use graphics::ellipse::Border;
 use opengl_graphics::{Filter, GlGraphics, GlyphCache, OpenGL, TextureSettings};
@@ -22,14 +22,14 @@ use rand_chacha::ChaCha20Rng;
 mod angels;
 mod fish;
 mod languages;
-mod vec2;
 mod state;
+mod vec2;
 
-use fish::{Fish};
+use fish::Fish;
 use languages::lang::*;
 
-use vec2::Vec2;
 use state::State;
+use vec2::Vec2;
 
 #[allow(dead_code)]
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
@@ -90,7 +90,6 @@ pub struct App<'a> {
     state: State,
     glyph_cache: GlyphCache<'a>,
 }
-
 
 fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
     let x = rng.gen_range(0.0..MAX_X);

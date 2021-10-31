@@ -1,10 +1,15 @@
 // Blub
 
 use decorum::NotNan;
-use rand_chacha::ChaCha20Rng;
 use rand::Rng;
+use rand_chacha::ChaCha20Rng;
 
-use crate::{GREEN, IMPULSE_COST, languages::lang::{Program, InterpreterState}, state::State, vec2::Vec2};
+use crate::{
+    languages::lang::{InterpreterState, Program},
+    state::State,
+    vec2::Vec2,
+    GREEN, IMPULSE_COST,
+};
 
 pub type Energy = NotNan<f64>;
 
@@ -23,12 +28,14 @@ pub struct Fish {
 pub fn behave_fishes(state: &mut State, delta_time: f64) {
     let fishes = &mut state.fishes;
     for i in 0..fishes.len() {
-        let state = InterpreterState { fishes, fish_num: i };
+        let state = InterpreterState {
+            fishes,
+            fish_num: i,
+        };
         let action = fishes[i].program.run(&state);
         execute_fish_action(&mut fishes[i], action, delta_time);
     }
 }
-
 
 impl Fish {
     #[allow(dead_code)]
@@ -82,7 +89,7 @@ impl Fish {
     }
 
     pub fn apply_impulse(&mut self, force: Vec2) {
-        let acceleration = force  / self.mass();
+        let acceleration = force / self.mass();
         self.velocity += acceleration;
     }
 
@@ -116,8 +123,6 @@ impl Fish {
         self.move_to(x_1, y_1);
         self.energy -= child_energy * 2.0;
 
-
-
         let mut child_program = self.program.clone();
         if !self.is_man_made {
             child_program.mutate(rng);
@@ -136,8 +141,6 @@ impl Fish {
     }
 }
 
-
-
 #[derive(Copy, Clone, Debug)]
 pub enum Action {
     Pass,
@@ -150,9 +153,8 @@ pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
     use Action::*;
     match action {
         Move(force) => {
-            
             // I hope this is impulse, I'm not a physicist
-            let impulse =  force * delta_time * FORCE_MULTIPLIER * fish.mass();
+            let impulse = force * delta_time * FORCE_MULTIPLIER * fish.mass();
             fish.apply_impulse(impulse);
 
             // neutral if: energy * distance.powi(2) * move_cost = surface_area * growth_factor
