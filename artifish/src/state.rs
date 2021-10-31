@@ -60,7 +60,7 @@ impl State {
             // TODO fix NAns
             // check for unstable feedback loop
             // TODO: can this be solved analytically?
-            debug_assert!(drag_force_vec.length() > fish.velocity.length() * fish.energy.into_inner());
+            debug_assert!(drag_force_vec.length() <= fish.velocity.length() * fish.energy.into_inner());
             fish.apply_impulse(drag_force_vec);
         }
 
