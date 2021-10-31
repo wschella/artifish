@@ -47,7 +47,7 @@ const FISH_GROWTH_FACTOR: f64 = 1.0;
 const FISH_GENERATION_RATE: f64 = 2.0 / 1.0;
 
 // TODO: FIXME
-const IMPULSE_COST: f64 = 0.1; // / MOVE_SPEED / MOVE_SPEED;
+const IMPULSE_COST: f64 = 0.01; // / MOVE_SPEED / MOVE_SPEED;
 
 fn main() {
     // Change this to OpenGL::V2_1 if not working.

@@ -174,6 +174,10 @@ pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
                 impulse *= (cost_max / cost).into();
             }
 
+            // without this multiplier, drag force creates an unstable feedback loop
+            // and crashes the program
+            impulse *= 0.1;
+
             fish.apply_impulse(impulse);
             fish.energy -= impulse.length() * IMPULSE_COST;
         }

@@ -56,10 +56,12 @@ impl State {
             const FRICTION_COEF: f64 = 1.0; // 1/2 * mass density of fluid * drag coefficient
             let drag_force: f64 =
                 FRICTION_COEF * fish.velocity.length().powi(2) * fish.surface_area();
-            let drag_force_vec = -drag_force * fish.velocity.normalize();
+            let drag_force_vec = - drag_force * fish.velocity.normalize();
             // TODO fix NAns
+            // check for unstable feedback loop
+            // TODO: can this be solved analytically?
+            debug_assert!(drag_force_vec.length() > fish.velocity.length() * fish.energy.into_inner());
             fish.apply_impulse(drag_force_vec);
-            dbg!(fish.velocity);
         }
 
         for i in 0..self.fishes.len() {
