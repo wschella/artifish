@@ -1,10 +1,29 @@
-use decorum::NotNan;
+use decorum::{NotNan, N64};
 
 use crate::fish::{Action, Fish};
 use crate::vec2::*;
 use crate::*;
 
 use std::cmp::Ord;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Fraction(pub f64);
+
+impl Fraction {
+    pub fn from_f64(inner: f64) -> Self {
+        assert!(!inner.is_nan());
+        assert!(inner >= 0.0);
+        assert!(inner <= 1.0);
+        Fraction(inner)
+    }
+}
+
+impl From<Fraction> for N64 {
+    fn from(f: Fraction) -> Self {
+        let Fraction(inner) = f;
+        N64::from_inner(inner)
+    }
+}
 
 // THE GREAT BEHAVIOURAL INTERPRETER
 #[derive(Clone)]
@@ -116,22 +135,14 @@ pub trait Mutable<T> {
 /// Expression that evaluates to T
 pub trait Expr<T>: ExprClone<T> + Mutable<T> + ExprTreeNode {
     fn eval(&self, s: &InterpreterState) -> T;
-
-    fn size(&self) -> u64 {
-        todo!()
-    }
 }
 
 // This split of from the main Expr trait mainly because we generate impl for this one
 // via derive proc-macros.
 pub trait ExprTreeNode {
-    fn borrow_nth_child_mut(&mut self, _n: u64) -> &mut dyn MutableExprSlot {
-        todo!()
-    }
-
-    fn num_children(&self) -> u64 {
-        todo!()
-    }
+    fn borrow_nth_child(&self, n: u64) -> &dyn MutableExprSlot;
+    fn borrow_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot;
+    fn num_children(&self) -> u64;
 }
 
 // https://stackoverflow.com/questions/30353462/how-to-clone-a-struct-storing-a-boxed-trait-object
@@ -169,22 +180,18 @@ impl<T> Clone for ExprSlot<T> {
 }
 
 impl<T> ExprSlot<T> {
-    fn new(expr: BoxedExpr<T>) -> Self {
+    pub fn new(expr: BoxedExpr<T>) -> Self {
         ExprSlot { inner: expr }
     }
 
-    fn eval(&self, s: &InterpreterState) -> T {
+    pub fn eval(&self, s: &InterpreterState) -> T {
         self.inner.eval(s)
     }
 
-    fn mutate(&self, rng: &mut ExprRng) -> ExprSlot<T> {
+    pub fn mutate(&self, rng: &mut ExprRng) -> ExprSlot<T> {
         Self {
             inner: self.inner.mutate(rng),
         }
-    }
-
-    fn size(&self) -> u64 {
-        self.inner.size()
     }
 }
 
@@ -197,7 +204,15 @@ impl<T> From<BoxedExpr<T>> for ExprSlot<T> {
 pub trait MutableExprSlot {
     fn mutate_expr(&mut self, rng: &mut ExprRng);
     fn borrow_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot;
+    fn borrow_nth_child(&self, n: u64) -> &dyn MutableExprSlot;
     fn num_children(&self) -> u64;
+
+    fn size(&self) -> u64 {
+        let children_size = (0..self.num_children())
+            .map(|child_num| self.borrow_nth_child(child_num).size())
+            .sum::<u64>();
+        children_size + 1
+    }
 }
 
 impl<T> MutableExprSlot for ExprSlot<T> {
@@ -207,6 +222,10 @@ impl<T> MutableExprSlot for ExprSlot<T> {
 
     fn borrow_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
         self.inner.borrow_nth_child_mut(n)
+    }
+
+    fn borrow_nth_child(&self, n: u64) -> &dyn MutableExprSlot {
+        self.inner.borrow_nth_child(n)
     }
 
     fn num_children(&self) -> u64 {
@@ -272,6 +291,7 @@ fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Acti
     assert!(max_depth >= ACTION_MIN);
     generate_tree!(max_depth - ACTION_MIN, rng, {
         generate_move_expr(rng, max_depth),
+        generate_set_velocity_expr(rng, max_depth),
     }, {
         generate_if_expr(generate_action_expr, rng, max_depth),
     })
@@ -286,6 +306,19 @@ fn generate_move_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action
         }),
     }, {
         generate_if_expr(generate_move_expr, rng, max_depth)
+    })
+}
+
+const SET_VELOCITY_MIN: u64 = DIRECTION_MIN + 1;
+fn generate_set_velocity_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
+    assert!(max_depth >= SET_VELOCITY_MIN);
+    generate_tree!(max_depth - SET_VELOCITY_MIN, rng, {
+        Box::new(SetVelocityExpr {
+            target_velocity: ExprSlot::new(generate_direction_expr(rng, max_depth - 1)),
+            max_energy_ratio: ExprSlot::new(generate_fraction_expr(rng, max_depth - 1)),
+        }),
+    }, {
+        generate_if_expr(generate_set_velocity_expr, rng, max_depth)
     })
 }
 
@@ -326,15 +359,6 @@ where
     })
 }
 
-// macro_rules! expr {
-//     ( Const( $value:expr )) => {
-//         Box::new(ConstExpr::new($value))
-//     };
-//     ( $expr:expr ) => {
-//         $expr
-//     }
-// }
-
 fn generate_bool_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<bool> {
     generate_tree!(max_depth, rng,
     0 => {
@@ -366,6 +390,17 @@ fn generate_f64_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<NotNan<
     },
     {
         generate_if_expr(generate_f64_expr, rng, max_depth)
+    })
+}
+
+const FRACTION_MIN: u64 = 1;
+fn generate_fraction_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Fraction> {
+    assert!(max_depth > 0);
+    generate_tree!(max_depth - FRACTION_MIN, rng, {
+        Box::new(ConstExpr::new(Fraction::from_f64(rng.gen_range(0.0..=1.0)))),
+    },
+    {
+        generate_if_expr(generate_fraction_expr, rng, max_depth)
     })
 }
 
@@ -540,6 +575,15 @@ impl Mutable<bool> for ConstExpr<bool> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
             generate_bool_expr(rng, 0),
+        })
+    }
+}
+
+impl Mutable<Fraction> for ConstExpr<Fraction> {
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Fraction> {
+        branch_using!(rng, {
+            wrap_in_generic(self, rng),
+            generate_fraction_expr(rng, FRACTION_MIN),
         })
     }
 }
@@ -739,6 +783,36 @@ impl Mutable<Action> for MoveExpr {
             wrap_in_generic::<Action>(self, rng),
             Box::new(MoveExpr {
                 direction: self.direction.mutate(rng),
+            })
+        })
+    }
+}
+
+#[derive(Clone, ArtifishExpr)]
+pub struct SetVelocityExpr {
+    pub target_velocity: ExprSlot<Vec2>,
+    pub max_energy_ratio: ExprSlot<Fraction>,
+}
+
+impl Expr<Action> for SetVelocityExpr {
+    fn eval(&self, state: &InterpreterState) -> Action {
+        let velocity_vec = self.target_velocity.eval(state);
+        let max_energy_ratio = self.max_energy_ratio.eval(state);
+        Action::SetVelocity(velocity_vec, max_energy_ratio)
+    }
+}
+
+impl Mutable<Action> for SetVelocityExpr {
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Action> {
+        branch_using!(rng, {
+            wrap_in_generic::<Action>(self, rng),
+            Box::new(SetVelocityExpr {
+                target_velocity: self.target_velocity.mutate(rng),
+                max_energy_ratio: self.max_energy_ratio.clone(),
+            }),
+            Box::new(SetVelocityExpr {
+                target_velocity: self.target_velocity.clone(),
+                max_energy_ratio: self.max_energy_ratio.mutate(rng),
             })
         })
     }

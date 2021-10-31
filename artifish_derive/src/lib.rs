@@ -57,6 +57,19 @@ pub fn derive_artifish_expr(input: TokenStream) -> TokenStream {
             // TODO: no unwrap
             let ident = field.ident.as_ref().unwrap();
             quote! {
+                #i => &self.#ident,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let child_match_entries_mut = child_exprs
+        .iter()
+        .enumerate()
+        .map(|(i, field)| {
+            let i = i as u64;
+            // TODO: no unwrap
+            let ident = field.ident.as_ref().unwrap();
+            quote! {
                 #i => &mut self.#ident,
             }
         })
@@ -68,9 +81,16 @@ pub fn derive_artifish_expr(input: TokenStream) -> TokenStream {
                 #num_children
             }
 
-            fn borrow_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
+            fn borrow_nth_child(&self, n: u64) -> &dyn MutableExprSlot {
                 match n {
                     #( #child_match_entries )*
+                    _ => panic!("child index out of range"),
+                }
+            }
+
+            fn borrow_nth_child_mut(&mut self, n: u64) -> &mut dyn MutableExprSlot {
+                match n {
+                    #( #child_match_entries_mut )*
                     _ => panic!("child index out of range"),
                 }
             }

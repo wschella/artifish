@@ -42,7 +42,7 @@ const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
 
 const MOVE_SPEED: f64 = 100.0;
-const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 4.0;
+const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 1.0;
 const FISH_GROWTH_FACTOR: f64 = 1.0;
 const FISH_GENERATION_RATE: f64 = 2.0 / 1.0;
 

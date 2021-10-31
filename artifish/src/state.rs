@@ -52,6 +52,16 @@ impl State {
             fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y));
         }
 
+        for fish in self.fishes.iter_mut() {
+            const FRICTION_COEF: f64 = 1.0; // 1/2 * mass density of fluid * drag coefficient
+            let drag_force: f64 =
+                FRICTION_COEF * fish.velocity.length().powi(2) * fish.surface_area();
+            let drag_force_vec = -drag_force * fish.velocity.normalize();
+            // TODO fix NAns
+            fish.apply_impulse(drag_force_vec);
+            dbg!(fish.velocity);
+        }
+
         for i in 0..self.fishes.len() {
             if self.fishes[i].energy > FISH_SPLIT_AT_SIZE {
                 let new = self.fishes[i].reproduce(&mut self.rng);

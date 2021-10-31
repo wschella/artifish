@@ -1,11 +1,11 @@
 // Blub
 
-use decorum::NotNan;
+use decorum::{NotNan, N64};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
 use crate::{
-    languages::lang::{InterpreterState, Program},
+    languages::lang::{Fraction, InterpreterState, Program},
     state::State,
     vec2::Vec2,
     GREEN, IMPULSE_COST,
@@ -145,6 +145,7 @@ impl Fish {
 pub enum Action {
     Pass,
     Move(Vec2),
+    SetVelocity(Vec2, Fraction),
 }
 
 const FORCE_MULTIPLIER: f64 = 1.0;
@@ -161,6 +162,20 @@ pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
             // with surface = energy.cuberoot().powi(2)
             // -> neutral distance = sqrt(surface_area * growth_factor * 1/move_cost * 1/energy)
             fish.energy -= impulse.length() * IMPULSE_COST; // we removed powi
+        }
+        SetVelocity(target_velocity, max_energy_ratio) => {
+            let mut impulse = (target_velocity - fish.velocity) * fish.mass();
+
+            let cost: N64 = N64::from_inner(impulse.length() * IMPULSE_COST);
+            let cost_max: N64 = fish.energy * N64::from(max_energy_ratio);
+
+            if cost > cost_max {
+                // bound impulse by allocated energy
+                impulse *= (cost_max / cost).into();
+            }
+
+            fish.apply_impulse(impulse);
+            fish.energy -= impulse.length() * IMPULSE_COST;
         }
         Pass => (),
     }
