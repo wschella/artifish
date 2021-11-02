@@ -5,7 +5,7 @@ use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
 use crate::{
-    languages::lang::{Fraction, InterpreterState, Program},
+    lang::{Fraction, InterpreterState, Program},
     state::State,
     vec2::Vec2,
     GREEN, IMPULSE_COST,
@@ -75,6 +75,7 @@ impl Fish {
         let dy = other.y - self.y;
         return Vec2::new(dx, dy);
     }
+
     pub fn direction_to(&self, other: &Fish) -> Vec2 {
         let displacement_to = self.displacement_to(other);
         // TODO: This is not what we really want, we should return an option or smth
@@ -176,7 +177,7 @@ pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
 
             // without this multiplier, drag force creates an unstable feedback loop
             // and crashes the program
-            impulse *= 0.1;
+            // impulse *= 0.1;
 
             fish.apply_impulse(impulse);
             fish.energy -= impulse.length() * IMPULSE_COST;

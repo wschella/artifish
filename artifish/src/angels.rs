@@ -1,4 +1,4 @@
-use super::languages::lang::*;
+use super::lang::*;
 
 fn node<E, T>(expr: E) -> ExprSlot<T>
 where

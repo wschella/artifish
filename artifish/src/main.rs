@@ -21,13 +21,12 @@ use rand_chacha::ChaCha20Rng;
 
 mod angels;
 mod fish;
-mod languages;
+mod lang;
 mod state;
 mod vec2;
 
 use fish::Fish;
-use languages::lang::*;
-
+use lang::Program;
 use state::State;
 use vec2::Vec2;
 
