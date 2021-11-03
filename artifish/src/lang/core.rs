@@ -45,6 +45,12 @@ impl Program {
         let node = get_node(&mut self.root, path_to_node.as_found());
         node.mutate_expr(rng);
     }
+
+    pub fn mutated(&self, rng: &mut ExprRng) -> Self {
+        let mut new_program = self.clone();
+        new_program.mutate(rng);
+        new_program
+    }
 }
 
 pub struct InterpreterState<'a> {

@@ -4,6 +4,7 @@ use rand::Rng;
 use super::core::*;
 use super::expressions::*;
 
+use crate::color::Color;
 use crate::fish::Action;
 use crate::vec2::*;
 

@@ -20,22 +20,17 @@ use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
 mod angels;
+mod color;
 mod fish;
 mod lang;
 mod state;
 mod vec2;
 
+use color::Color;
 use fish::Fish;
 use lang::Program;
 use state::State;
 use vec2::Vec2;
-
-#[allow(dead_code)]
-const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-#[allow(dead_code)]
-const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
@@ -94,12 +89,6 @@ fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
     let x = rng.gen_range(0.0..MAX_X);
     let y = rng.gen_range(0.0..MAX_Y);
     let radius = rng.gen_range(5.0..1000.0);
-    let color: [f32; 4] = [
-        rng.gen_range(0.0..=1.0),
-        rng.gen_range(0.0..=1.0),
-        rng.gen_range(0.0..=1.0),
-        1.0,
-    ];
     let program = Program::random(rng, 6);
     Fish {
         x,
@@ -107,21 +96,10 @@ fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
         energy: NotNan::from_inner(radius),
         velocity: Vec2::new(0.0, 0.0),
         program,
-        color,
+        color: Color::random(rng),
         is_man_made: false,
         tag: None,
     }
-}
-
-fn darken(color: &[f32; 4]) -> [f32; 4] {
-    let f = 0.5;
-
-    [
-        color[0] * f,
-        color[1] * f,
-        color[2] * f,
-        1.0 - f * (1.0 - color[3]),
-    ]
 }
 
 impl<'a> App<'a> {
@@ -134,18 +112,18 @@ impl<'a> App<'a> {
 
         self.gl.draw(args.viewport(), |c, gl| {
             // Clear the screen.
-            clear(BLACK, gl);
+            clear(Color::BLACK.into(), gl);
 
             let identity = c.transform;
 
             for fish in fishes.iter().rev() {
-                let fish_color_dark = darken(&fish.color);
+                let fish_color_dark = fish.color.darken(0.5);
                 let cell = ellipse::circle(fish.x, fish.y, fish.radius());
                 let cell_border = Border {
-                    color: fish_color_dark,
+                    color: fish_color_dark.into(),
                     radius: 1.0,
                 };
-                Ellipse::new(fish.color).border(cell_border).draw(
+                Ellipse::new(fish.color.into()).border(cell_border).draw(
                     cell,
                     &Default::default(),
                     identity,
@@ -153,11 +131,11 @@ impl<'a> App<'a> {
                 );
 
                 let center = ellipse::circle(fish.x, fish.y, 1.5);
-                ellipse(fish_color_dark, center, identity, gl);
+                ellipse(fish_color_dark.into(), center, identity, gl);
 
                 if let Some(ref tag) = fish.tag {
                     text(
-                        WHITE,
+                        Color::WHITE.into(),
                         20,
                         tag,
                         glyph_cache,
@@ -168,7 +146,7 @@ impl<'a> App<'a> {
                 }
 
                 let t = identity.trans(100.0, 100.0);
-                text(RED, 100, "tetten", glyph_cache, t, gl).unwrap();
+                text(Color::RED.into(), 100, "tetten", glyph_cache, t, gl).unwrap();
             }
         });
     }

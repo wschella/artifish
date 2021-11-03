@@ -1,3 +1,6 @@
+use rand::Rng;
+use rand_chacha::ChaCha20Rng;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Vec2 {
     pub x: f64,
@@ -13,11 +16,20 @@ impl Vec2 {
         Vec2 { x: 0.0, y: 0.0 }
     }
 
+    pub fn random_normalized(rng: &mut ChaCha20Rng) -> Self {
+        let angle = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
+
+        Vec2 {
+            x: angle.cos(),
+            y: angle.sin(),
+        }
+    }
+
     pub fn length(&self) -> f64 {
         (self.x.powi(2) + self.y.powi(2)).sqrt()
     }
 
-    pub fn normalize(&self) -> Self {
+    pub fn normalized(&self) -> Self {
         let length = self.length();
         if length == 0.0 {
             return Vec2::zero();

@@ -1,34 +1,25 @@
 use decorum::NotNan;
 
+use crate::color::Color;
 use crate::lang::core::*;
 use crate::lang::generators::*;
+use crate::lang::Fraction;
 use crate::vec2::*;
 
 // region: color
 
-#[derive(Clone, Copy, Debug)]
-pub struct Color {
-    inner: [f32; 4],
-}
-
-impl Color {
-    pub fn new(inner: [f32; 4]) -> Self {
-        Self { inner }
-    }
-}
-
 #[derive(Clone, ArtifishExpr)]
 pub struct FishColorExpr {
-    fish: ExprSlot<FishRef>,
+    pub fish: ExprSlot<FishRef>,
 }
 
 impl Expr<Color> for FishColorExpr {
     fn eval(&self, s: &InterpreterState) -> Color {
         let fish_ref = self.fish.eval(s);
         if let Some(fish_ix) = fish_ref.maybe_fish_num {
-            Color::new(s.fishes[fish_ix].color)
+            s.fishes[fish_ix].color
         } else {
-            Color::new([0.0, 0.0, 0.0, 1.0])
+            Color::BLACK
         }
     }
 }
@@ -37,6 +28,48 @@ impl Mutable<Color> for FishColorExpr {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Color> {
         branch_using!(rng, {
             generate_color_expr(rng, COLOR_MIN),
+            wrap_in_generic(self, rng),
+        })
+    }
+}
+
+#[derive(Clone, ArtifishExpr)]
+pub struct ColorSimilarityExpr {
+    pub lhs: ExprSlot<Color>,
+    pub rhs: ExprSlot<Color>,
+}
+
+impl Expr<Fraction> for ColorSimilarityExpr {
+    fn eval(&self, s: &InterpreterState) -> Fraction {
+        let lhs_color = self.lhs.eval(s).inner;
+        let rhs_color = self.rhs.eval(s).inner;
+
+        // todo: maybe move to helper on color
+        let mut dot_product = 0.0;
+        let mut acc_lhs = 0.0;
+        let mut acc_rhs = 0.0;
+
+        for i in 0..4 {
+            acc_lhs += lhs_color[i].powi(2);
+            acc_rhs += rhs_color[i].powi(2);
+            dot_product += lhs_color[i] * rhs_color[i];
+        }
+
+        let lhs_len = acc_lhs.sqrt();
+        let rhs_len = acc_rhs.sqrt();
+
+        let cos = dot_product / (lhs_len * rhs_len);
+        // catch rounding errors
+        let cos = cos.clamp(0.0, 1.0);
+
+        return Fraction::from_f64(cos as f64);
+    }
+}
+
+impl Mutable<Fraction> for ColorSimilarityExpr {
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Fraction> {
+        branch_using!(rng, {
+            generate_fraction_expr(rng, FRACTION_MIN),
             wrap_in_generic(self, rng),
         })
     }

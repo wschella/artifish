@@ -4,22 +4,26 @@ use super::*;
 use crate::lang::core::*;
 use crate::lang::generators::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Fraction(pub f64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Fraction(pub N64);
 
 impl Fraction {
-    pub fn from_f64(inner: f64) -> Self {
-        assert!(!inner.is_nan());
+    pub fn from_f64(inner_float: f64) -> Self {
+        let inner = N64::from_inner(inner_float);
         assert!(inner >= 0.0);
         assert!(inner <= 1.0);
         Fraction(inner)
+    }
+
+    pub fn to_f64(self) -> f64 {
+        self.0.into_inner()
     }
 }
 
 impl From<Fraction> for N64 {
     fn from(f: Fraction) -> Self {
         let Fraction(inner) = f;
-        N64::from_inner(inner)
+        return inner;
     }
 }
 

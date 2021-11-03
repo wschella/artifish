@@ -1,4 +1,5 @@
 use super::lang::*;
+use crate::fish::Action;
 
 fn node<E, T>(expr: E) -> ExprSlot<T>
 where
@@ -32,6 +33,28 @@ pub fn smartie() -> Program {
                 }),
             }),
             max_energy_ratio: node(ConstExpr::new(Fraction::from_f64(0.01))),
+        }),
+    }
+}
+
+pub fn toast_niet_kannibaal() -> Program {
+    let smartie = smartie();
+
+    Program {
+        root: node(IfExpr {
+            condition: node(LessThenExpr {
+                left: node(ConstExpr::new(Fraction::from_f64(0.9))),
+                right: node(ColorSimilarityExpr {
+                    lhs: node(FishColorExpr {
+                        fish: node(DichtsteVisExpr),
+                    }),
+                    rhs: node(FishColorExpr {
+                        fish: node(GetSelfExpr),
+                    }),
+                }),
+            }),
+            consequent: node(ConstExpr::new(Action::Pass)),
+            alternative: smartie.root,
         }),
     }
 }

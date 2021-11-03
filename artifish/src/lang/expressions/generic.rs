@@ -1,6 +1,7 @@
 use decorum::NotNan;
 
 use super::*;
+use crate::color::Color;
 use crate::fish::*;
 use crate::lang::core::*;
 use crate::lang::generators::*;

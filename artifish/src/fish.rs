@@ -1,14 +1,14 @@
 // Blub
 
 use decorum::{NotNan, N64};
-use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
 use crate::{
+    color::Color,
     lang::{Fraction, InterpreterState, Program},
     state::State,
     vec2::Vec2,
-    GREEN, IMPULSE_COST,
+    IMPULSE_COST,
 };
 
 pub type Energy = NotNan<f64>;
@@ -20,20 +20,24 @@ pub struct Fish {
     pub energy: Energy,
     pub velocity: Vec2,
     pub program: Program,
-    pub color: [f32; 4],
+    pub color: Color,
     pub is_man_made: bool,
     pub tag: Option<String>,
 }
 
 pub fn behave_fishes(state: &mut State, delta_time: f64) {
-    let fishes = &mut state.fishes;
-    for i in 0..fishes.len() {
-        let state = InterpreterState {
-            fishes,
-            fish_num: i,
+    for i in 0..state.fishes.len() {
+        let action = {
+            let fishes = &mut state.fishes;
+
+            let interpreter_state = InterpreterState {
+                fishes: fishes,
+                fish_num: i,
+            };
+
+            fishes[i].program.run(&interpreter_state)
         };
-        let action = fishes[i].program.run(&state);
-        execute_fish_action(&mut fishes[i], action, delta_time);
+        execute_fish_action(state, i, action, delta_time);
     }
 }
 
@@ -46,7 +50,7 @@ impl Fish {
             energy,
             program,
             velocity: Vec2::new(0.0, 0.0),
-            color: GREEN,
+            color: Color::GREEN,
             is_man_made: false,
             tag: None,
         }
@@ -89,6 +93,11 @@ impl Fish {
         self.radius() > self.distance(other)
     }
 
+    pub fn generate_impulse(&mut self, impulse: Vec2) {
+        self.apply_impulse(impulse);
+        self.energy -= impulse.length() * IMPULSE_COST;
+    }
+
     pub fn apply_impulse(&mut self, force: Vec2) {
         let acceleration = force / self.mass();
         self.velocity += acceleration;
@@ -108,37 +117,30 @@ impl Fish {
         self.y += direction.y;
     }
 
-    pub fn reproduce(&mut self, rng: &mut ChaCha20Rng) -> Fish {
-        let ax = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
-        let opposite = ax - std::f64::consts::PI;
-
-        let radius = self.radius();
-
-        let x_1 = self.x + radius * ax.cos();
-        let y_1 = self.y + radius * ax.sin();
-        let x_2 = self.x + radius * opposite.cos();
-        let y_2 = self.y + radius * opposite.sin();
-
-        // self.energy -= SPLIT_COST;
-        let child_energy = self.energy / 5.0;
-        self.move_to(x_1, y_1);
-        self.energy -= child_energy * 2.0;
-
-        let mut child_program = self.program.clone();
-        if !self.is_man_made {
-            child_program.mutate(rng);
-        };
-
-        Fish {
-            x: x_2,
-            y: y_2,
-            energy: child_energy,
-            velocity: Vec2::new(0.0, 0.0),
-            program: child_program,
-            color: self.color,
+    pub fn split(&mut self, impulse: Vec2, mass_fraction: f64, rng: &mut ChaCha20Rng) -> Fish {
+        let direction = impulse.normalized();
+        let mut child = Fish {
+            x: self.x + direction.x * self.radius(),
+            y: self.y + direction.y * self.radius(),
+            energy: self.energy * mass_fraction,
+            program: self.program.mutated(rng),
+            velocity: self.velocity,
+            color: self.color.mutate(rng),
             is_man_made: self.is_man_made,
             tag: self.tag.clone(),
-        }
+        };
+        child.apply_impulse(impulse);
+
+        self.energy -= child.energy;
+        child
+    }
+
+    pub fn reproduce(&mut self, rng: &mut ChaCha20Rng) -> Fish {
+        let direction = Vec2::random_normalized(rng);
+        let child_impulse = direction * self.mass() * 0.2 * 2.0;
+        let child = self.split(child_impulse, 0.2, rng);
+        self.apply_impulse(child_impulse.invert());
+        child
     }
 }
 
@@ -147,22 +149,24 @@ pub enum Action {
     Pass,
     Move(Vec2),
     SetVelocity(Vec2, Fraction),
+    // TODO: Split expression
+    Split(Vec2, Fraction),
 }
 
 const FORCE_MULTIPLIER: f64 = 1.0;
 
-pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
+pub fn execute_fish_action(state: &mut State, fish_index: usize, action: Action, delta_time: f64) {
     use Action::*;
+    let fish = &mut state.fishes[fish_index];
     match action {
         Move(force) => {
             // I hope this is impulse, I'm not a physicist
             let impulse = force * delta_time * FORCE_MULTIPLIER * fish.mass();
-            fish.apply_impulse(impulse);
 
             // neutral if: energy * distance.powi(2) * move_cost = surface_area * growth_factor
             // with surface = energy.cuberoot().powi(2)
             // -> neutral distance = sqrt(surface_area * growth_factor * 1/move_cost * 1/energy)
-            fish.energy -= impulse.length() * IMPULSE_COST; // we removed powi
+            fish.generate_impulse(impulse)
         }
         SetVelocity(target_velocity, max_energy_ratio) => {
             let mut impulse = (target_velocity - fish.velocity) * fish.mass();
@@ -178,9 +182,11 @@ pub fn execute_fish_action(fish: &mut Fish, action: Action, delta_time: f64) {
             // without this multiplier, drag force creates an unstable feedback loop
             // and crashes the program
             // impulse *= 0.1;
-
-            fish.apply_impulse(impulse);
-            fish.energy -= impulse.length() * IMPULSE_COST;
+            fish.generate_impulse(impulse);
+        }
+        Split(impulse, mass_fraction) => {
+            let child = fish.split(impulse, mass_fraction.to_f64(), &mut state.rng);
+            state.add_fish(child);
         }
         Pass => (),
     }

@@ -3,10 +3,11 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rand_distr::{Distribution, Poisson};
 
+use crate::color::Color;
 use crate::fish::behave_fishes;
 use crate::vec2::Vec2;
 use crate::{angels, generate_fish, FISH_GENERATION_RATE, MOVE_SPEED};
-use crate::{fish::Fish, FISH_GROWTH_FACTOR, FISH_SPLIT_AT_SIZE, MAX_X, MAX_Y, RED};
+use crate::{fish::Fish, FISH_GROWTH_FACTOR, FISH_SPLIT_AT_SIZE, MAX_X, MAX_Y};
 
 #[derive(Clone)]
 pub struct State {
@@ -19,24 +20,35 @@ impl State {
         let mut rng = ChaCha20Rng::seed_from_u64(seed);
         let mut fishes: Vec<Fish> = (0..100).map(|_| generate_fish(&mut rng)).collect();
 
-        for _ in 0..10 {
-            let x = rng.gen_range(0.0..MAX_X);
-            let y = rng.gen_range(0.0..MAX_Y);
+        let smarties = (0..10).map(|_| Fish {
+            x: rng.gen_range(0.0..MAX_X),
+            y: rng.gen_range(0.0..MAX_Y),
+            energy: NotNan::from_inner(500.0),
+            velocity: Vec2::new(0.0, 0.0),
+            program: angels::smartie(),
+            color: Color::RED,
+            is_man_made: true,
+            tag: Some("s".to_owned()),
+        });
+        fishes.extend(smarties);
 
-            let smartie = Fish {
-                x,
-                y,
-                energy: NotNan::from_inner(500.0),
-                velocity: Vec2::new(0.0, 0.0),
-                program: angels::smartie(),
-                color: RED,
-                is_man_made: true,
-                tag: Some("s".to_owned()),
-            };
-            fishes.push(smartie);
-        }
+        let toast_niet_kannibaals = (0..10).map(|_| Fish {
+            x: rng.gen_range(0.0..MAX_X),
+            y: rng.gen_range(0.0..MAX_Y),
+            energy: NotNan::from_inner(500.0),
+            velocity: Vec2::new(0.0, 0.0),
+            program: angels::toast_niet_kannibaal(),
+            color: Color::GREEN,
+            is_man_made: true,
+            tag: Some("t".to_owned()),
+        });
+        fishes.extend(toast_niet_kannibaals);
 
         Self { fishes, rng }
+    }
+
+    pub fn add_fish(&mut self, fish: Fish) {
+        self.fishes.push(fish);
     }
 
     pub fn update(&mut self, delta_time: f64) {
@@ -53,10 +65,10 @@ impl State {
         }
 
         for fish in self.fishes.iter_mut() {
-            const FRICTION_COEF: f64 = 1.0; // 1/2 * mass density of fluid * drag coefficient
+            const FRICTION_COEF: f64 = 25.0; // 1/2 * mass density of fluid * drag coefficient
             let drag_force: f64 =
                 FRICTION_COEF * fish.velocity.length().powi(2) * fish.surface_area();
-            let drag_force_vec = -drag_force * fish.velocity.normalize();
+            let drag_force_vec = -drag_force * fish.velocity.normalized();
 
             // TODO: I am not sure whether this is how physics work
             let drag_impulse_vec = delta_time * drag_force_vec;
