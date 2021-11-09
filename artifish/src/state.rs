@@ -1,13 +1,11 @@
-use decorum::NotNan;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rand_distr::{Distribution, Poisson};
 
-use crate::color::Color;
+use crate::angels::generate_angel;
 use crate::fish::behave_fishes;
-use crate::vec2::Vec2;
-use crate::{angels, generate_fish, FISH_GENERATION_RATE, MOVE_SPEED};
 use crate::{fish::Fish, FISH_GROWTH_FACTOR, FISH_SPLIT_AT_SIZE, MAX_X, MAX_Y};
+use crate::{generate_fish, FISH_GENERATION_RATE, MOVE_SPEED};
 
 #[derive(Clone)]
 pub struct State {
@@ -20,29 +18,8 @@ impl State {
         let mut rng = ChaCha20Rng::seed_from_u64(seed);
         let mut fishes: Vec<Fish> = (0..100).map(|_| generate_fish(&mut rng)).collect();
 
-        let smarties = (0..10).map(|_| Fish {
-            x: rng.gen_range(0.0..MAX_X),
-            y: rng.gen_range(0.0..MAX_Y),
-            energy: NotNan::from_inner(500.0),
-            velocity: Vec2::new(0.0, 0.0),
-            program: angels::smartie(),
-            color: Color::RED,
-            is_man_made: true,
-            tag: Some("s".to_owned()),
-        });
-        fishes.extend(smarties);
-
-        let toast_niet_kannibaals = (0..10).map(|_| Fish {
-            x: rng.gen_range(0.0..MAX_X),
-            y: rng.gen_range(0.0..MAX_Y),
-            energy: NotNan::from_inner(500.0),
-            velocity: Vec2::new(0.0, 0.0),
-            program: angels::toast_niet_kannibaal(),
-            color: Color::GREEN,
-            is_man_made: true,
-            tag: Some("t".to_owned()),
-        });
-        fishes.extend(toast_niet_kannibaals);
+        let angels: Vec<Fish> = (0..40).map(|_| generate_angel(&mut rng)).collect();
+        fishes.extend(angels);
 
         Self { fishes, rng }
     }
@@ -62,6 +39,10 @@ impl State {
             let displacement = fish.velocity * delta_time * MOVE_SPEED;
             fish.move_by(&displacement);
             fish.move_to(fish.x.clamp(0.0, MAX_X), fish.y.clamp(0.0, MAX_Y));
+        }
+
+        for fish in self.fishes.iter_mut() {
+            // TODO: Fix accelaration to velocity
         }
 
         for fish in self.fishes.iter_mut() {

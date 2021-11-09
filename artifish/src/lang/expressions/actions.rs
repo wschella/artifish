@@ -56,3 +56,33 @@ impl Mutable<Action> for SetVelocityExpr {
         })
     }
 }
+
+#[derive(Clone, ArtifishExpr)]
+pub struct SplitExpr {
+    pub impulse: ExprSlot<Vec2>,
+    pub mass_fraction: ExprSlot<Fraction>,
+}
+
+impl Expr<Action> for SplitExpr {
+    fn eval(&self, state: &InterpreterState) -> Action {
+        let impulse = self.impulse.eval(state);
+        let mass_fraction = self.mass_fraction.eval(state);
+        Action::Split(impulse, mass_fraction)
+    }
+}
+
+impl Mutable<Action> for SplitExpr {
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<Action> {
+        branch_using!(rng, {
+            wrap_in_generic::<Action>(self, rng),
+            Box::new(SplitExpr {
+                impulse: self.impulse.mutate(rng),
+                mass_fraction: self.mass_fraction.clone(),
+            }),
+            Box::new(SplitExpr {
+                impulse: self.impulse.clone(),
+                mass_fraction: self.mass_fraction.mutate(rng),
+            })
+        })
+    }
+}

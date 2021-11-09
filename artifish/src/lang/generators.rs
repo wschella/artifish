@@ -54,6 +54,10 @@ macro_rules! generate_tree {
 
 }
 
+const fn max(a: usize, b: usize) -> usize {
+    [a, b][(a < b) as usize]
+}
+
 // -------------------------------------------------------------------------
 
 pub const ACTION_MIN: u64 = MOVE_MIN;
@@ -61,6 +65,7 @@ pub fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<
     assert!(max_depth >= ACTION_MIN);
     generate_tree!(max_depth - ACTION_MIN, rng, {
         generate_move_expr(rng, max_depth),
+        generate_split_expr(rng, max_depth),
         generate_set_velocity_expr(rng, max_depth),
     }, {
         generate_if_expr(generate_action_expr, rng, max_depth),
@@ -89,6 +94,19 @@ pub fn generate_set_velocity_expr(mut rng: &mut ExprRng, max_depth: u64) -> Boxe
         }),
     }, {
         generate_if_expr(generate_set_velocity_expr, rng, max_depth)
+    })
+}
+
+pub const SPLIT_MIN: u64 = max(DIRECTION_MIN as usize, FRACTION_MIN as usize) as u64 + 1;
+pub fn generate_split_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
+    assert!(max_depth >= SPLIT_MIN);
+    generate_tree!(max_depth - SPLIT_MIN, rng, {
+        Box::new(SplitExpr {
+            impulse: ExprSlot::new(generate_direction_expr(rng, max_depth - 1)),
+            mass_fraction: ExprSlot::new(generate_fraction_expr(rng, max_depth - 1)),
+        }),
+    }, {
+        generate_if_expr(generate_split_expr, rng, max_depth)
     })
 }
 

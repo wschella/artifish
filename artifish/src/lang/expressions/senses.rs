@@ -193,6 +193,10 @@ impl Mutable<Vec2> for FishDirectionExpr {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
             generate_direction_expr(rng, DIRECTION_MIN),
+            Box::new(FishDirectionExpr {
+                origin: self.target.clone(),
+                target: self.origin.clone(),
+            }),
         })
     }
 }

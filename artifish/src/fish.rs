@@ -124,7 +124,7 @@ impl Fish {
             y: self.y + direction.y * self.radius(),
             energy: self.energy * mass_fraction,
             program: self.program.mutated(rng),
-            velocity: self.velocity,
+            velocity: Vec2::zero(),
             color: self.color.mutate(rng),
             is_man_made: self.is_man_made,
             tag: self.tag.clone(),
@@ -149,7 +149,6 @@ pub enum Action {
     Pass,
     Move(Vec2),
     SetVelocity(Vec2, Fraction),
-    // TODO: Split expression
     Split(Vec2, Fraction),
 }
 

@@ -94,7 +94,7 @@ fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
         x,
         y,
         energy: NotNan::from_inner(radius),
-        velocity: Vec2::new(0.0, 0.0),
+        velocity: Vec2::zero(),
         program,
         color: Color::random(rng),
         is_man_made: false,
@@ -152,6 +152,7 @@ impl<'a> App<'a> {
     }
 
     pub fn update(&mut self, args: &UpdateArgs) {
+        // HERE
         self.state.update(args.dt);
     }
 }
