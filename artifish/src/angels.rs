@@ -105,7 +105,7 @@ pub fn generate_angel(mut rng: &mut ChaCha20Rng) -> Fish {
     branch_using!(rng, {
         make_angel(rng, smartie(), Color::RED, "SMRT"),
         make_angel(rng, toast_niet_kannibaal(), Color::BLUE, "TNK"),
-        make_angel(rng, ass_is_grass(), Color::GREEN, "ASS"),
+        // make_angel(rng, ass_is_grass(), Color::GREEN, "ASS"),
     })
 }
 

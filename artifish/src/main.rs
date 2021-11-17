@@ -32,6 +32,8 @@ use lang::Program;
 use state::State;
 use vec2::Vec2;
 
+const N_TICKS: u8 = 20;
+
 const MAX_X: f64 = 800.0;
 const MAX_Y: f64 = 600.0;
 
@@ -39,9 +41,6 @@ const MOVE_SPEED: f64 = 100.0;
 const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 1.0;
 const FISH_GROWTH_FACTOR: f64 = 1.0;
 const FISH_GENERATION_RATE: f64 = 2.0 / 1.0;
-
-// TODO: FIXME
-const IMPULSE_COST: f64 = 0.01; // / MOVE_SPEED / MOVE_SPEED;
 
 fn main() {
     // Change this to OpenGL::V2_1 if not working.
@@ -64,6 +63,7 @@ fn main() {
     let mut app = App {
         gl: GlGraphics::new(opengl),
         state: State::new(seed),
+        elapsed_time: 0.0,
         glyph_cache: glyphs,
     };
 
@@ -83,6 +83,7 @@ pub struct App<'a> {
     gl: GlGraphics, // OpenGL drawing backend.
     state: State,
     glyph_cache: GlyphCache<'a>,
+    elapsed_time: f64,
 }
 
 fn generate_fish(rng: &mut ChaCha20Rng) -> Fish {
@@ -145,14 +146,24 @@ impl<'a> App<'a> {
                     .unwrap();
                 }
 
-                let t = identity.trans(100.0, 100.0);
-                text(Color::RED.into(), 100, "tetten", glyph_cache, t, gl).unwrap();
+                // let t = identity.trans(100.0, 100.0);
+                // text(Color::RED.into(), 100, "tetten", glyph_cache, t, gl).unwrap();
+
+                let t = identity.trans(MAX_X-100.0, MAX_Y-100.0);
+                text(Color::RED.into(), 30, &fishes.len().to_string(), glyph_cache, t, gl).unwrap();
             }
         });
     }
 
     pub fn update(&mut self, args: &UpdateArgs) {
-        // HERE
-        self.state.update(args.dt);
+
+        let time_step= 1.0 / (N_TICKS as f64);
+        self.elapsed_time += args.dt;
+
+        if self.elapsed_time > time_step {
+            // easy mode
+            self.elapsed_time =  0.0;
+            self.state.update(time_step);
+        }
     }
 }

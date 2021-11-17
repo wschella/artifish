@@ -25,6 +25,10 @@ impl Vec2 {
         }
     }
 
+    pub fn powi(self, n: i32) -> Self {
+        self.normalized() * self.length().powi(n)
+    }
+
     pub fn length(&self) -> f64 {
         (self.x.powi(2) + self.y.powi(2)).sqrt()
     }
