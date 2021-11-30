@@ -130,7 +130,13 @@ pub struct FishControl<'a> {
 }
 
 impl<'a> FishControl<'a> {
-    pub fn split_fish(&mut self, rng: &mut ChaCha20Rng, fish_index: usize, force_per_kg: Vec2, mass_fraction: f64) {
+    pub fn split_fish(
+        &mut self,
+        rng: &mut ChaCha20Rng,
+        fish_index: usize,
+        force_per_kg: Vec2,
+        mass_fraction: f64,
+    ) {
         let fish = &mut self.fishes[fish_index];
 
         let child = fish.split(force_per_kg.normalized(), mass_fraction, rng);
@@ -146,7 +152,13 @@ impl<'a> FishControl<'a> {
     }
 }
 
-pub fn execute_fish_action(fish_control: &mut FishControl, fish_index: usize, action: Action, delta_time: f64, rng: &mut ChaCha20Rng) {
+pub fn execute_fish_action(
+    fish_control: &mut FishControl,
+    fish_index: usize,
+    action: Action,
+    delta_time: f64,
+    rng: &mut ChaCha20Rng,
+) {
     use Action::*;
     let fish = &mut fish_control.fishes[fish_index];
     match action {
@@ -156,7 +168,7 @@ pub fn execute_fish_action(fish_control: &mut FishControl, fish_index: usize, ac
             fish.energy -= cost;
 
             fish_control.controls[fish_index].force += force;
-            
+
             // old comments pls ignore
             // neutral if: energy * distance.powi(2) * move_cost = surface_area * growth_factor
             // with surface = energy.cuberoot().powi(2)

@@ -3,7 +3,7 @@ use rand_chacha::ChaCha20Rng;
 use rand_distr::{Distribution, Poisson};
 
 use crate::angels::generate_angel;
-use crate::fish::{Control, FishControl, execute_fish_action};
+use crate::fish::{execute_fish_action, Control, FishControl};
 use crate::lang::InterpreterState;
 use crate::vec2::Vec2;
 use crate::{fish::Fish, FISH_GROWTH_FACTOR, FISH_SPLIT_AT_SIZE, MAX_X, MAX_Y};
@@ -27,29 +27,34 @@ impl State {
     }
 
     pub fn update(&mut self, delta_time: f64) {
-        let mut controls = vec![Control { force: Vec2::zero() }; self.fishes.len()];
+        let mut controls = vec![
+            Control {
+                force: Vec2::zero()
+            };
+            self.fishes.len()
+        ];
         let mut fish_control = FishControl {
             controls: &mut controls,
             fishes: &mut self.fishes,
         };
-    
+
         for fish in fish_control.fishes.iter_mut() {
             fish.energy += FISH_GROWTH_FACTOR * fish.surface_area() * delta_time;
         }
 
         // behave fishes
         for i in 0..fish_control.fishes.len() {
-            let action = {    
-                let interpreter_state = InterpreterState{
+            let action = {
+                let interpreter_state = InterpreterState {
                     fishes: fish_control.fishes,
                     fish_num: i,
                 };
-    
+
                 fish_control.fishes[i].program.run(&interpreter_state)
             };
             execute_fish_action(&mut fish_control, i, action, delta_time, &mut self.rng);
         }
-        
+
         // Reproduce
         for i in 0..fish_control.fishes.len() {
             if fish_control.fishes[i].energy > FISH_SPLIT_AT_SIZE {
@@ -76,9 +81,8 @@ impl State {
             // OUR_DRAG_COEF = 1/2 * rho * Cd
 
             const OUR_DRAG_COEF: f64 = 0.0; // 1/2 * mass density of fluid * drag coefficient
-            let drag_force: Vec2 = OUR_DRAG_COEF 
-                * fish.velocity.invert().powi(2)
-                * fish.surface_area();
+            let drag_force: Vec2 =
+                OUR_DRAG_COEF * fish.velocity.invert().powi(2) * fish.surface_area();
 
             debug_assert!(drag_force.length() * delta_time <= fish.momentum().length());
 
@@ -87,7 +91,6 @@ impl State {
             let impulse = resultant_force * delta_time;
             let delta_velocity = impulse / fish.mass();
             fish.velocity += delta_velocity;
-
         }
 
         // Generate new fishes

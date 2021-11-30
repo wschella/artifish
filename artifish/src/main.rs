@@ -149,20 +149,27 @@ impl<'a> App<'a> {
                 // let t = identity.trans(100.0, 100.0);
                 // text(Color::RED.into(), 100, "tetten", glyph_cache, t, gl).unwrap();
 
-                let t = identity.trans(MAX_X-100.0, MAX_Y-100.0);
-                text(Color::RED.into(), 30, &fishes.len().to_string(), glyph_cache, t, gl).unwrap();
+                let t = identity.trans(MAX_X - 100.0, MAX_Y - 100.0);
+                text(
+                    Color::RED.into(),
+                    30,
+                    &fishes.len().to_string(),
+                    glyph_cache,
+                    t,
+                    gl,
+                )
+                .unwrap();
             }
         });
     }
 
     pub fn update(&mut self, args: &UpdateArgs) {
-
-        let time_step= 1.0 / (N_TICKS as f64);
+        let time_step = 1.0 / (N_TICKS as f64);
         self.elapsed_time += args.dt;
 
         if self.elapsed_time > time_step {
             // easy mode
-            self.elapsed_time =  0.0;
+            self.elapsed_time = 0.0;
             self.state.update(time_step);
         }
     }
