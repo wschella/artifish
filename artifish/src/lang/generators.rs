@@ -54,13 +54,17 @@ macro_rules! generate_tree {
 
 }
 
-const fn max(a: usize, b: usize) -> usize {
+const fn min(a: u64, b: u64) -> u64 {
+    [a, b][(a > b) as usize]
+}
+
+const fn max(a: u64, b: u64) -> u64 {
     [a, b][(a < b) as usize]
 }
 
 // -------------------------------------------------------------------------
 
-pub const ACTION_MIN: u64 = MOVE_MIN;
+pub const ACTION_MIN: u64 = max(MOVE_MIN, max(SPLIT_MIN, VELOCITY_MIN)) + 1;
 pub fn generate_action_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
     assert!(max_depth >= ACTION_MIN);
     generate_tree!(max_depth - ACTION_MIN, rng, {
@@ -84,12 +88,12 @@ pub fn generate_move_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Ac
     })
 }
 
-pub const SET_VELOCITY_MIN: u64 = DIRECTION_MIN + 1;
+pub const SET_VELOCITY_MIN: u64 = VELOCITY_MIN + 1;
 pub fn generate_set_velocity_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
     assert!(max_depth >= SET_VELOCITY_MIN);
     generate_tree!(max_depth - SET_VELOCITY_MIN, rng, {
         Box::new(SetVelocityExpr {
-            target_velocity: ExprSlot::new(generate_direction_expr(rng, max_depth - 1)),
+            target_velocity: ExprSlot::new(generate_velocity_expr(rng, max_depth - 1)),
             max_energy_ratio: ExprSlot::new(generate_fraction_expr(rng, max_depth - 1)),
         }),
     }, {
@@ -97,7 +101,7 @@ pub fn generate_set_velocity_expr(mut rng: &mut ExprRng, max_depth: u64) -> Boxe
     })
 }
 
-pub const SPLIT_MIN: u64 = max(DIRECTION_MIN as usize, FRACTION_MIN as usize) as u64 + 1;
+pub const SPLIT_MIN: u64 = max(DIRECTION_MIN, FRACTION_MIN) + 1;
 pub fn generate_split_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Action> {
     assert!(max_depth >= SPLIT_MIN);
     generate_tree!(max_depth - SPLIT_MIN, rng, {
@@ -121,6 +125,19 @@ pub fn generate_direction_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedEx
         }),
      }, {
         generate_if_expr(generate_direction_expr, rng, max_depth)
+    })
+}
+
+pub const VELOCITY_MIN: u64 = DIRECTION_MIN + 1;
+pub fn generate_velocity_expr(mut rng: &mut ExprRng, max_depth: u64) -> BoxedExpr<Vec2> {
+    assert!(max_depth >= VELOCITY_MIN);
+    generate_tree!(max_depth - VELOCITY_MIN, rng, {
+        Box::new(MulExpr {
+            left: ExprSlot::new(generate_direction_expr(rng, max_depth - 1)),
+            right: ExprSlot::new(generate_fraction_expr(rng, max_depth - 1)),
+        }),
+     }, {
+        generate_if_expr(generate_velocity_expr, rng, max_depth)
     })
 }
 

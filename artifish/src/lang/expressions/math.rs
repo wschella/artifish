@@ -88,11 +88,80 @@ where
             self.right.inner.clone(),
             Box::new(AddExpr {
                 left: self.left.clone(),
-                right: ExprSlot::new(self.mutate(rng)),
+                right: self.right.mutate(rng),
             }),
             Box::new(AddExpr {
                 left: self.left.mutate(rng),
                 right: self.right.clone(),
+            })
+        })
+    }
+}
+
+#[derive(Clone, ArtifishExpr)]
+pub struct MulExpr<T1, T2> {
+    pub left: ExprSlot<T1>,
+    pub right: ExprSlot<T2>,
+}
+
+impl<T1, T2> Expr<<T1 as std::ops::Mul<T2>>::Output> for MulExpr<T1, T2>
+where
+    T1: std::ops::Mul<T2> + Clone + 'static,
+    T2: Clone + 'static,
+    <T1 as std::ops::Mul<T2>>::Output: Clone + 'static,
+{
+    fn eval(&self, state: &InterpreterState) -> <T1 as std::ops::Mul<T2>>::Output {
+        return self.left.eval(state) * self.right.eval(state);
+    }
+}
+
+impl<T1, T2> Mutable<<T1 as std::ops::Mul<T2>>::Output> for MulExpr<T1, T2>
+where
+    T1: std::ops::Mul<T2> + Clone + 'static,
+    T2: Clone + 'static,
+    <T1 as std::ops::Mul<T2>>::Output: Clone + 'static,
+{
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<<T1 as std::ops::Mul<T2>>::Output> {
+        branch_using!(rng, {
+            wrap_in_generic::<<T1 as std::ops::Mul<T2>>::Output>(self, rng),
+            // self.left.inner.clone(),
+            // self.right.inner.clone(),
+            Box::new(MulExpr {
+                left: self.left.clone(),
+                right: self.right.mutate(rng),
+            }),
+            Box::new(MulExpr {
+                left: self.left.mutate(rng),
+                right: self.right.clone(),
+            })
+        })
+    }
+}
+
+#[derive(Clone, ArtifishExpr)]
+pub struct NegateExpr<T> {
+    pub value: ExprSlot<T>,
+}
+
+impl<T> Expr<T> for NegateExpr<T>
+where
+    T: std::ops::Neg<Output = T> + Clone + 'static,
+{
+    fn eval(&self, state: &InterpreterState) -> T {
+        return -self.value.eval(state);
+    }
+}
+
+impl<T> Mutable<T> for NegateExpr<T>
+where
+    T: std::ops::Neg<Output = T> + Clone + 'static,
+{
+    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
+        branch_using!(rng, {
+            wrap_in_generic::<T>(self, rng),
+            self.value.inner.clone(),
+            Box::new(NegateExpr {
+                value: self.value.mutate(rng),
             })
         })
     }

@@ -41,6 +41,11 @@ const MOVE_SPEED: f64 = 100.0;
 const FISH_SPLIT_AT_SIZE: f64 = 90_000.0 * 1.0;
 const FISH_GROWTH_FACTOR: f64 = 1.0;
 const FISH_GENERATION_RATE: f64 = 2.0 / 1.0;
+const SPLIT_COST_FACTOR: f64 = 1.0;
+const BASE_SPLIT_COST: f64 = 69.0;
+const MUTATION_RATE: f64 = 0.1;
+// const DIE_ON_AMBITIOUS_BABY: bool = true;
+const DIE_ON_AMBITIOUS_BABY: bool = false;
 
 fn main() {
     // Change this to OpenGL::V2_1 if not working.

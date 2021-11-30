@@ -1,12 +1,14 @@
 // Blub
 
 use decorum::{NotNan, N64};
+use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
 use crate::{
     color::Color,
     lang::{Fraction, Program},
     vec2::Vec2,
+    BASE_SPLIT_COST, DIE_ON_AMBITIOUS_BABY, MUTATION_RATE, SPLIT_COST_FACTOR,
 };
 
 pub type Energy = NotNan<f64>;
@@ -93,22 +95,6 @@ impl Fish {
         self.x += direction.x;
         self.y += direction.y;
     }
-
-    pub fn split(&mut self, direction: Vec2, mass_fraction: f64, rng: &mut ChaCha20Rng) -> Fish {
-        let direction = direction.normalized();
-        let child = Fish {
-            x: self.x + direction.x * self.radius(),
-            y: self.y + direction.y * self.radius(),
-            energy: self.energy * mass_fraction,
-            program: self.program.mutated(rng),
-            velocity: Vec2::zero(),
-            color: self.color.mutate(rng),
-            is_man_made: self.is_man_made,
-            tag: self.tag.clone(),
-        };
-        self.energy -= child.energy;
-        child
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -139,10 +125,33 @@ impl<'a> FishControl<'a> {
     ) {
         let fish = &mut self.fishes[fish_index];
 
-        let child = fish.split(force_per_kg.normalized(), mass_fraction, rng);
-        let child_force = Vec2::new(force_per_kg.x * child.mass(), force_per_kg.y * child.mass());
-        self.fishes.push(child);
-        self.controls.push(Control { force: child_force });
+        let direction = force_per_kg.normalized();
+        let child = Fish {
+            x: fish.x + direction.x * fish.radius() * 1.5,
+            y: fish.y + direction.y * fish.radius() * 1.5,
+            energy: fish.energy * mass_fraction,
+            program: if rng.gen_range(0.0..1.0) < MUTATION_RATE {
+                fish.program.mutated(rng)
+            } else {
+                fish.program.clone()
+            },
+            velocity: Vec2::zero(),
+            color: fish.color.mutate(rng),
+            is_man_made: fish.is_man_made,
+            tag: fish.tag.clone(),
+        };
+        let cost: N64 = child.energy * SPLIT_COST_FACTOR + BASE_SPLIT_COST;
+        if fish.energy > cost {
+            fish.energy -= cost;
+            let (x, y) = (force_per_kg.x, force_per_kg.y);
+            let child_force = Vec2::new(x * child.mass(), y * child.mass());
+            self.fishes.push(child);
+            self.controls.push(Control { force: child_force });
+        } else {
+            if DIE_ON_AMBITIOUS_BABY {
+                fish.energy -= cost;
+            }
+        }
     }
 
     pub fn reproduce(&mut self, rng: &mut ChaCha20Rng, fish_index: usize) {
@@ -184,7 +193,7 @@ pub fn execute_fish_action(
             let impulse_needed = (target_velocity - fish.velocity) * fish.mass();
 
             let mut force_needed = impulse_needed / delta_time;
-            let mut cost = N64::from(force_needed.length() * delta_time);
+            let mut cost: N64 = N64::from(force_needed.length() * delta_time);
             let cost_max: N64 = fish.energy * N64::from(max_energy_ratio);
             if cost > cost_max {
                 // bound impulse by allocated energy
@@ -195,10 +204,10 @@ pub fn execute_fish_action(
             fish_control.controls[fish_index].force += force_needed;
         }
         Split(force_per_kg, mass_fraction) => {
-            const MIN_SPLIT_ENERGY: f64 = 1000.0;
-            if fish_control.fishes[fish_index].energy > MIN_SPLIT_ENERGY {
-                fish_control.split_fish(rng, fish_index, force_per_kg, mass_fraction.to_f64());
-            }
+            // const MIN_SPLIT_ENERGY: f64 = 3.0 * 1000.0;
+            // if fish_control.fishes[fish_index].energy > MIN_SPLIT_ENERGY {
+            fish_control.split_fish(rng, fish_index, force_per_kg, mass_fraction.to_f64());
+            // }
         }
         Pass => (),
     }

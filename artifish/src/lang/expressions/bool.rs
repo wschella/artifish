@@ -29,32 +29,3 @@ where
         })
     }
 }
-
-#[derive(Clone, ArtifishExpr)]
-pub struct NegateExpr<T> {
-    pub value: ExprSlot<T>,
-}
-
-impl<T> Expr<T> for NegateExpr<T>
-where
-    T: std::ops::Neg<Output = T> + Clone + 'static,
-{
-    fn eval(&self, state: &InterpreterState) -> T {
-        return -self.value.eval(state);
-    }
-}
-
-impl<T> Mutable<T> for NegateExpr<T>
-where
-    T: std::ops::Neg<Output = T> + Clone + 'static,
-{
-    fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<T> {
-        branch_using!(rng, {
-            wrap_in_generic::<T>(self, rng),
-            self.value.inner.clone(),
-            Box::new(NegateExpr {
-                value: self.value.mutate(rng),
-            })
-        })
-    }
-}

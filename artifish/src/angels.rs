@@ -19,28 +19,32 @@ where
 pub fn smartie() -> Program {
     Program {
         root: node(SetVelocityExpr {
-            target_velocity: node(IfExpr {
-                // if dichtste_vis.energy < self.energy
-                condition: node(LessThenExpr {
-                    left: node(FishEnergyExpr {
-                        fish: node(DichtsteVisExpr),
+            target_velocity: node(MulExpr {
+                left: node(ConstExpr::new(Fraction::from_f64(0.2))),
+                right: node(IfExpr {
+                    // if dichtste_vis.energy < self.energy
+                    condition: node(LessThenExpr {
+                        left: node(FishEnergyExpr {
+                            fish: node(DichtsteVisExpr),
+                        }),
+                        right: node(FishEnergyExpr {
+                            fish: node(GetSelfExpr),
+                        }),
                     }),
-                    right: node(FishEnergyExpr {
-                        fish: node(GetSelfExpr),
+                    // then move towards
+                    consequent: node(FishDirectionExpr {
+                        origin: node(GetSelfExpr),
+                        target: node(DichtsteVisExpr),
                     }),
-                }),
-                // then move towards
-                consequent: node(FishDirectionExpr {
-                    origin: node(GetSelfExpr),
-                    target: node(DichtsteVisExpr),
-                }),
-                // else run away
-                alternative: node(FishDirectionExpr {
-                    origin: node(DichtsteVisExpr),
-                    target: node(GetSelfExpr),
+                    // else run away
+                    alternative: node(FishDirectionExpr {
+                        origin: node(DichtsteVisExpr),
+                        target: node(GetSelfExpr),
+                    }),
                 }),
             }),
-            max_energy_ratio: node(ConstExpr::new(Fraction::from_f64(0.01))),
+
+            max_energy_ratio: node(ConstExpr::new(Fraction::from_f64(0.05))),
         }),
     }
 }
@@ -71,10 +75,10 @@ pub fn ass_is_grass() -> Program {
     Program {
         root: node(IfExpr {
             condition: node(LessThenExpr {
-                left: node(ConstExpr::new(N64::from_inner(30_000.0))),
-                right: node(FishEnergyExpr {
+                left: node(FishEnergyExpr {
                     fish: node(GetSelfExpr),
                 }),
+                right: node(ConstExpr::new(N64::from_inner(10_000.0))),
             }),
             consequent: node(ConstExpr::new(Action::Pass)),
             alternative: node(SplitExpr {
@@ -105,7 +109,7 @@ pub fn generate_angel(mut rng: &mut ChaCha20Rng) -> Fish {
     branch_using!(rng, {
         make_angel(rng, smartie(), Color::RED, "SMRT"),
         make_angel(rng, toast_niet_kannibaal(), Color::BLUE, "TNK"),
-        // make_angel(rng, ass_is_grass(), Color::GREEN, "ASS"),
+        make_angel(rng, ass_is_grass(), Color::GREEN, "ASS"),
     })
 }
 

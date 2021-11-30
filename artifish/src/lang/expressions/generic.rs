@@ -80,6 +80,9 @@ impl Mutable<NotNan<f64>> for ConstExpr<NotNan<f64>> {
     fn mutate(&self, mut rng: &mut ExprRng) -> BoxedExpr<NotNan<f64>> {
         branch_using!(rng, {
             wrap_in_generic(self, rng),
+            Box::new(NegateExpr {
+                value: ExprSlot { inner: Box::new(self.clone())},
+            }),
             generate_f64_expr(rng, F64_MIN),
         })
     }
